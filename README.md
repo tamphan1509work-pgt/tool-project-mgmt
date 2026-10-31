@@ -40,6 +40,12 @@ npm run dev
 npm run build && npm start
 ```
 
+**Bản demo không cần máy chủ** (đóng gói cả backend + SQLite vào trình duyệt thành một file HTML, dữ liệu lưu trong `localStorage`):
+
+```bash
+npm run build:demo      # kết quả: frontend/dist-demo/project-hub.html
+```
+
 **Chạy test API:**
 
 ```bash

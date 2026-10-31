@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code, fmtDateTime } from '../constants.js';
-import { useAsync, useLookup, useToast } from '../context.jsx';
+import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
 import EntityForm from './EntityForm.jsx';
 import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
 
@@ -14,6 +14,7 @@ export default function DetailPage({ resource, backLabel, formFields, actions, b
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const { refreshLookup } = useLookup();
   const [editing, setEditing] = useState(false);
   const { data, loading, error, reload } = useAsync(() => api.get(resource, id), [resource, id]);
@@ -39,7 +40,7 @@ export default function DetailPage({ resource, backLabel, formFields, actions, b
   };
 
   const remove = async () => {
-    if (!window.confirm(`Xoá ${code(resource, id)} "${data.title}"? Thao tác không thể hoàn tác.`)) return;
+    if (!(await confirm(`Xoá ${code(resource, id)} "${data.title}"? Thao tác không thể hoàn tác.`))) return;
     try {
       await api.remove(resource, id);
       toast(`Đã xoá ${code(resource, id)}`);

@@ -6,7 +6,7 @@ import EntityForm from '../components/EntityForm.jsx';
 import ResourceList from '../components/ResourceList.jsx';
 import { Badge, Modal, Prose } from '../components/ui.jsx';
 import { code, fmtDateTime, label, options } from '../constants.js';
-import { useLookup, useToast } from '../context.jsx';
+import { useConfirm, useLookup, useToast } from '../context.jsx';
 import { bugFields, testCaseFields } from '../forms.js';
 
 export function TestCaseList() {
@@ -38,13 +38,23 @@ function RunPanel({ tc, reload, onFailed }) {
   const toast = useToast();
   const { lookup, refreshLookup } = useLookup();
   const [note, setNote] = useState('');
-  const [by, setBy] = useState(() => localStorage.getItem('pm.tester') ?? '');
+  const [by, setBy] = useState(() => {
+    try {
+      return localStorage.getItem('pm.tester') ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [busy, setBusy] = useState(false);
 
   const run = async (result) => {
     setBusy(true);
     try {
-      if (by) localStorage.setItem('pm.tester', by);
+      try {
+        if (by) localStorage.setItem('pm.tester', by);
+      } catch {
+        // bỏ qua nếu trình duyệt chặn lưu trữ
+      }
       const r = await api.addRun(tc.id, { result, note, executed_by: by });
       toast(`Đã ghi nhận: ${label('testStatus', result)}`, result === 'passed' ? 'success' : 'warn');
       setNote('');
@@ -96,8 +106,9 @@ function RunPanel({ tc, reload, onFailed }) {
 
 function RunHistory({ tc, reload }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const remove = async (run) => {
-    if (!window.confirm('Xoá lần chạy này?')) return;
+    if (!(await confirm('Xoá lần chạy này?'))) return;
     try {
       await api.removeRun(run.id);
       reload();

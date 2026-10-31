@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code } from '../constants.js';
-import { useAsync, useLookup, useToast } from '../context.jsx';
+import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
 import EntityForm from './EntityForm.jsx';
 import { Empty, ErrorBox, Icon, Loading, Modal, Pagination } from './ui.jsx';
 
@@ -97,6 +97,7 @@ export default function ResourceList({
   const [params, setParam, setParams] = useParamSetter();
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const { refreshLookup } = useLookup();
   const [editing, setEditing] = useState(null); // null | 'new' | row
 
@@ -142,7 +143,7 @@ export default function ResourceList({
   };
 
   const remove = async (row) => {
-    if (!window.confirm(`Xoá ${code(resource, row.id)} "${row.title}"?`)) return;
+    if (!(await confirm(`Xoá ${code(resource, row.id)} "${row.title}"?`))) return;
     try {
       await api.remove(resource, row.id);
       toast(`Đã xoá ${code(resource, row.id)}`);

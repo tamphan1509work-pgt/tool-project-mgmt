@@ -147,11 +147,14 @@ export function MeetingDetail() {
       resource="meetings"
       backLabel="Danh sách biên bản họp"
       formFields={meetingFields}
-      actions={() => (
-        <button className="btn" onClick={() => window.print()}>
-          <Icon name="print" size={16} /> In / PDF
-        </button>
-      )}
+      actions={() =>
+        // Bản demo chạy trong khung nhúng không mở được hộp thoại in
+        import.meta.env.MODE !== 'demo' && (
+          <button className="btn" onClick={() => window.print()}>
+            <Icon name="print" size={16} /> In / PDF
+          </button>
+        )
+      }
     >
       {(m, { reload }) => (
         <div className="detail-grid">

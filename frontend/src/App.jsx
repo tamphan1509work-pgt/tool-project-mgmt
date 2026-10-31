@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { resetDemo } from './api.js';
 import { Empty, Icon } from './components/ui.jsx';
-import { LookupProvider, ToastProvider } from './context.jsx';
+import { ConfirmProvider, LookupProvider, ToastProvider, useConfirm } from './context.jsx';
 import { BugDetail, BugList } from './pages/Bugs.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { MeetingDetail, MeetingList } from './pages/Meetings.jsx';
@@ -24,7 +25,24 @@ const TITLES = {
   bugs: 'Quản lý bug',
 };
 
-function Layout({ children }) {
+function DemoBanner({ onReset }) {
+  const confirm = useConfirm();
+  const reset = async () => {
+    if (!(await confirm('Xoá mọi thay đổi và khôi phục dữ liệu mẫu ban đầu?', { confirmLabel: 'Khôi phục' }))) return;
+    resetDemo();
+    onReset();
+  };
+  return (
+    <div className="demo-banner">
+      Bản demo · dữ liệu chỉ lưu trong trình duyệt này
+      <button className="btn btn-sm" onClick={reset}>
+        Khôi phục dữ liệu mẫu
+      </button>
+    </div>
+  );
+}
+
+function Layout({ children, onReset }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const section = pathname.split('/')[1] ?? '';
@@ -56,6 +74,7 @@ function Layout({ children }) {
             <Icon name="menu" />
           </button>
           <h1 className="page-title">{title}</h1>
+          {import.meta.env.MODE === 'demo' && <DemoBanner onReset={onReset} />}
         </header>
         <main className="content">{children}</main>
       </div>
@@ -64,24 +83,33 @@ function Layout({ children }) {
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  // Đổi key để tải lại toàn bộ dữ liệu sau khi khôi phục dữ liệu mẫu (bản demo)
+  const [generation, setGeneration] = useState(0);
+  const onReset = () => {
+    navigate('/');
+    setGeneration((g) => g + 1);
+  };
   return (
-    <ToastProvider>
-      <LookupProvider>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/meetings" element={<MeetingList />} />
-            <Route path="/meetings/:id" element={<MeetingDetail />} />
-            <Route path="/tasks" element={<TaskList />} />
-            <Route path="/tasks/:id" element={<TaskDetail />} />
-            <Route path="/test-cases" element={<TestCaseList />} />
-            <Route path="/test-cases/:id" element={<TestCaseDetail />} />
-            <Route path="/bugs" element={<BugList />} />
-            <Route path="/bugs/:id" element={<BugDetail />} />
-            <Route path="*" element={<Empty>Không tìm thấy trang.</Empty>} />
-          </Routes>
-        </Layout>
-      </LookupProvider>
+    <ToastProvider key={generation}>
+      <ConfirmProvider>
+        <LookupProvider>
+          <Layout onReset={onReset}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/meetings" element={<MeetingList />} />
+              <Route path="/meetings/:id" element={<MeetingDetail />} />
+              <Route path="/tasks" element={<TaskList />} />
+              <Route path="/tasks/:id" element={<TaskDetail />} />
+              <Route path="/test-cases" element={<TestCaseList />} />
+              <Route path="/test-cases/:id" element={<TestCaseDetail />} />
+              <Route path="/bugs" element={<BugList />} />
+              <Route path="/bugs/:id" element={<BugDetail />} />
+              <Route path="*" element={<Empty>Không tìm thấy trang.</Empty>} />
+            </Routes>
+          </Layout>
+        </LookupProvider>
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

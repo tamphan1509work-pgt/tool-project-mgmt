@@ -6,10 +6,16 @@ export class ApiError extends Error {
   }
 }
 
+// Bản demo (vite build --mode demo) chạy backend ngay trong trình duyệt thay vì gọi máy chủ
+const demo = import.meta.env.MODE === 'demo' ? await import('./demo/server.js') : null;
+const doFetch = demo ? demo.demoFetch : (...args) => fetch(...args);
+/** Chỉ có ở bản demo: khôi phục dữ liệu mẫu */
+export const resetDemo = demo?.resetDemo;
+
 async function request(method, path, body) {
   let res;
   try {
-    res = await fetch(`/api${path}`, {
+    res = await doFetch(`/api${path}`, {
       method,
       headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,

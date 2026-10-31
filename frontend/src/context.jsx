@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
+import { Modal } from './components/ui.jsx';
 
 /* ---------- useAsync: tải dữ liệu theo deps ---------- */
 export function useAsync(fn, deps) {
@@ -66,3 +67,40 @@ export function ToastProvider({ children }) {
   );
 }
 export const useToast = () => useContext(ToastCtx);
+
+/* ---------- Hộp xác nhận trong trang (thay cho window.confirm) ---------- */
+const ConfirmCtx = createContext(async () => false);
+
+export function ConfirmProvider({ children }) {
+  const [state, setState] = useState(null); // { message, confirmLabel, resolve }
+  const confirm = useCallback(
+    (message, { confirmLabel = 'Xoá' } = {}) => new Promise((resolve) => setState({ message, confirmLabel, resolve })),
+    [],
+  );
+  const close = useCallback(
+    (ok) => {
+      state?.resolve(ok);
+      setState(null);
+    },
+    [state],
+  );
+  return (
+    <ConfirmCtx.Provider value={confirm}>
+      {children}
+      {state && (
+        <Modal title="Xác nhận" onClose={() => close(false)}>
+          <p className="confirm-text">{state.message}</p>
+          <div className="form-actions">
+            <button type="button" className="btn" onClick={() => close(false)}>
+              Huỷ
+            </button>
+            <button type="button" className="btn btn-danger" autoFocus onClick={() => close(true)}>
+              {state.confirmLabel}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </ConfirmCtx.Provider>
+  );
+}
+export const useConfirm = () => useContext(ConfirmCtx);

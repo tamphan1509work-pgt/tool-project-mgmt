@@ -152,6 +152,7 @@ export function validate(db, fields, body, { partial = false } = {}) {
  *   filterable: [cột lọc theo giá trị chính xác, hỗ trợ "a,b" và "none"],
  *   sortable: { key: sqlExpr }, defaultSort, defaultOrder,
  *   beforeSave(data, existing): bổ sung trường dẫn xuất,
+ *   afterUpdate(db, row, existing): xử lý thêm sau khi cập nhật (trong cùng transaction),
  *   expand(db, row): thêm dữ liệu liên quan cho GET /:id,
  *   extraFilters(query, where, params): bộ lọc đặc biệt,
  * }
@@ -304,6 +305,7 @@ export function createResource(db, cfg) {
           ).run(...cols.map((c) => data[c]), id);
         }
         saveLinks(id, links);
+        cfg.afterUpdate?.(db, getRow(id), existing);
       }),
     );
     res.json(getRow(id));

@@ -66,16 +66,17 @@ export function seed(db, { reset = false } = {}) {
 
     // ---------- Thành viên & vai trò ----------
     const people = {};
-    for (const [name, email] of [
-      ['Nguyễn Văn An', 'an.nguyen@example.com'],
-      ['Trần Thị Bình', 'binh.tran@example.com'],
-      ['Lê Minh Châu', 'chau.le@example.com'],
-      ['Phạm Thu Dung', 'dung.pham@example.com'],
-      ['Hoàng Gia Huy', 'huy.hoang@example.com'],
-      ['Vũ Ngọc Lan', 'lan.vu@example.com'],
-      ['Đỗ Quang Minh', 'minh.do@example.com'],
+    for (const [name, email, position, phone] of [
+      ['Nguyễn Văn An', 'an.nguyen@example.com', 'Project Manager', '0901 234 567'],
+      ['Trần Thị Bình', 'binh.tran@example.com', 'Business Analyst', '0902 345 678'],
+      ['Lê Minh Châu', 'chau.le@example.com', 'Senior Backend Engineer', '0903 456 789'],
+      ['Phạm Thu Dung', 'dung.pham@example.com', 'QA Engineer', '0904 567 890'],
+      ['Hoàng Gia Huy', 'huy.hoang@example.com', 'Backend Developer', null],
+      ['Vũ Ngọc Lan', 'lan.vu@example.com', 'Frontend Developer', null],
+      ['Đỗ Quang Minh', 'minh.do@example.com', 'UI/UX Designer', null],
+      ['Bùi Thanh Tâm', 'tam.bui@example.com', 'Mobile Developer', null],
     ]) {
-      people[name] = insert('members', { name, email });
+      people[name] = insert('members', { name, email, position, phone });
     }
     const join = (project, name, role) =>
       insert('project_members', { project_id: project, member_id: people[name], role, joined_at: day(-21) });
@@ -89,6 +90,8 @@ export function seed(db, { reset = false } = {}) {
     join(crm, 'Trần Thị Bình', 'pm');
     join(crm, 'Lê Minh Châu', 'tech_lead');
     join(crm, 'Phạm Thu Dung', 'tester');
+    join(crm, 'Vũ Ngọc Lan', 'developer');
+    join(crm, 'Đỗ Quang Minh', 'designer');
 
     // ---------- Tài liệu ----------
     const doc = (row) => insert('documents', row);
@@ -243,9 +246,10 @@ export function seed(db, { reset = false } = {}) {
     t({
       project_id: pay,
       title: 'Chuẩn bị môi trường staging',
-      status: 'todo',
+      status: 'in_progress',
       priority: 'medium',
       assignee: 'Lê Minh Châu',
+      start_date: day(-1),
       due_date: day(5),
       meeting_id: m1,
     });
@@ -255,6 +259,7 @@ export function seed(db, { reset = false } = {}) {
       status: 'todo',
       priority: 'low',
       assignee: 'Nguyễn Văn An',
+      start_date: day(2),
       due_date: day(4),
       meeting_id: m2,
     });
@@ -265,7 +270,8 @@ export function seed(db, { reset = false } = {}) {
         status: 'todo',
         priority: 'medium',
         assignee: 'Phạm Thu Dung',
-        due_date: day(8),
+        start_date: day(3),
+        due_date: day(10),
       },
       [dSrs],
     );
@@ -275,7 +281,8 @@ export function seed(db, { reset = false } = {}) {
       status: 'todo',
       priority: 'high',
       assignee: 'Trần Thị Bình',
-      due_date: day(2),
+      start_date: day(1),
+      due_date: day(7),
       meeting_id: mCrm,
     });
     t({
@@ -284,7 +291,35 @@ export function seed(db, { reset = false } = {}) {
       status: 'todo',
       priority: 'medium',
       assignee: 'Lê Minh Châu',
-      due_date: day(12),
+      start_date: day(6),
+      due_date: day(16),
+    });
+    t({
+      project_id: crm,
+      title: 'Wireframe màn hình quản lý khách hàng',
+      status: 'todo',
+      priority: 'medium',
+      assignee: 'Đỗ Quang Minh',
+      start_date: day(8),
+      due_date: day(18),
+    });
+    t({
+      project_id: crm,
+      title: 'Dựng khung dự án frontend CRM',
+      status: 'todo',
+      priority: 'low',
+      assignee: 'Vũ Ngọc Lan',
+      start_date: day(12),
+      due_date: day(22),
+    });
+    t({
+      project_id: pay,
+      title: 'Tối ưu giao diện thanh toán trên di động',
+      status: 'todo',
+      priority: 'medium',
+      assignee: 'Đỗ Quang Minh',
+      start_date: day(0),
+      due_date: day(6),
     });
 
     // ---------- Test case & kết quả chạy ----------

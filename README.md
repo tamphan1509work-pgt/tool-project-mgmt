@@ -5,6 +5,7 @@
 | Phân hệ | Chức năng |
 |---|---|
 | **Dự án & thành viên** | Danh sách dự án (mã, tên, trạng thái, thời gian), số task/bug đang mở. Trong từng dự án: thêm thành viên (chọn người có sẵn hoặc tạo mới), gán **vai trò trong dự án** (PM, BA, Tech lead, Developer, Tester, Designer, DevOps, Stakeholder), đổi vai trò, gỡ thành viên. Một người có thể tham gia nhiều dự án với vai trò khác nhau |
+| **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
 | **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
 | **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp và **liên kết tài liệu** thiết kế / đặc tả |
 | **Test report** | Báo cáo kiểm thử của dự án: tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module; danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) với lịch sử chạy |
@@ -99,6 +100,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | DELETE | `/test-runs/:id` | Xoá một lần chạy (trạng thái test case được tính lại) |
 | GET / POST | `/projects/:id/members` | Danh sách / thêm thành viên dự án `{ member_id }` hoặc `{ name, email }` kèm `role` |
 | PATCH / DELETE | `/projects/:id/members/:memberId` | Đổi vai trò `{ role }` / gỡ khỏi dự án |
+| GET | `/gantt?project_id=&member_id=&include_done=true` | Dữ liệu biểu đồ Gantt: thành viên → dự án (vai trò) → task |
 | GET | `/test-report?project_id=` | Báo cáo test: tổng hợp, theo module, tỉ lệ đạt, tiến độ |
 | GET | `/dashboard?project_id=` | Số liệu tổng quan của dự án |
 | GET | `/lookup?project_id=` | Danh sách rút gọn cho dropdown (dự án, thành viên, meetings, tasks, test cases, tài liệu, người, module) |
@@ -119,6 +121,8 @@ Lỗi validate trả về `400` dạng `{ "error": "Dữ liệu không hợp l�
 - Trạng thái dự án: `planning`, `active`, `on_hold`, `completed`, `cancelled`
 - Vai trò thành viên: `pm`, `ba`, `tech_lead`, `developer`, `tester`, `designer`, `devops`, `stakeholder`
 - Loại tài liệu: `design`, `specification`; trạng thái: `draft`, `in_review`, `approved`, `obsolete`
+
+Task được tính là của một thành viên khi tên người thực hiện trùng tên thành viên (không phân biệt hoa thường, bỏ khoảng trắng thừa). Đổi tên thành viên sẽ tự cập nhật tên ở task, bug, biên bản họp và tài liệu.
 
 Database từ phiên bản cũ (chưa có dự án) được tự động nâng cấp khi khởi động: dữ liệu cũ được gom vào dự án **Dự án mặc định** (`DEFAULT`).
 

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS members (
   name        TEXT NOT NULL,
   email       TEXT UNIQUE,
   phone       TEXT,
+  position    TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -152,6 +153,9 @@ const SCOPED_TABLES = ['meetings', 'tasks', 'test_cases', 'bugs', 'documents'];
  * thêm cột project_id và gom dữ liệu cũ vào "Dự án mặc định".
  */
 function migrate(db) {
+  const memberCols = db.prepare('PRAGMA table_info(members)').all().map((c) => c.name);
+  if (!memberCols.includes('position')) db.exec('ALTER TABLE members ADD COLUMN position TEXT');
+
   for (const table of SCOPED_TABLES) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
     if (!cols.includes('project_id')) {

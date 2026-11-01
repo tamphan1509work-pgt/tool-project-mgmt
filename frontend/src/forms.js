@@ -166,3 +166,10 @@ export const documentFields = [
   },
   { name: 'description', label: 'Mô tả / Tóm tắt nội dung', type: 'textarea', rows: 4 },
 ];
+
+export const memberFields = [
+  { name: 'name', label: 'Họ tên', required: true },
+  { name: 'position', label: 'Chức danh', placeholder: 'VD: Backend Developer' },
+  { name: 'email', label: 'Email', placeholder: 'ten@congty.com' },
+  { name: 'phone', label: 'Số điện thoại' },
+];

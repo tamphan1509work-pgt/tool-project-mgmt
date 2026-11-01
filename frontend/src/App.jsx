@@ -7,6 +7,7 @@ import { BugDetail, BugList } from './pages/Bugs.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { DocumentDetail, DocumentList } from './pages/Documents.jsx';
 import { MeetingDetail, MeetingList } from './pages/Meetings.jsx';
+import { MemberDetail, MemberList } from './pages/Members.jsx';
 import { ProjectDetail, ProjectList } from './pages/Projects.jsx';
 import { TaskDetail, TaskList } from './pages/Tasks.jsx';
 import { TestCaseDetail, TestCaseList } from './pages/TestCases.jsx';
@@ -27,7 +28,8 @@ const DOC_NAV = [
 
 const TITLES = {
   '': 'Tổng quan dự án',
-  projects: 'Quản lý dự án & thành viên',
+  projects: 'Quản lý dự án',
+  members: 'Quản lý thành viên',
   meetings: 'Quản lý meeting minutes',
   tasks: 'Quản lý task',
   'test-cases': 'Test report',
@@ -44,7 +46,7 @@ function ProjectSwitcher() {
     setProjectId(Number(e.target.value));
     // Đang xem chi tiết một bản ghi -> quay về danh sách của dự án mới
     const [, section, id] = pathname.split('/');
-    if (id && section !== 'projects') navigate(`/${section}`);
+    if (id && !['projects', 'members'].includes(section)) navigate(`/${section}`);
   };
   return (
     <div className="project-switcher">
@@ -121,7 +123,7 @@ function Layout({ children, onReset }) {
   const section = pathname.split('/')[1] ?? '';
   const { project } = useProject();
   const base = TITLES[section] ?? '';
-  const title = section === 'projects' || !project ? base : `${base} · ${project.code}`;
+  const title = ['projects', 'members'].includes(section) || !project ? base : `${base} · ${project.code}`;
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -136,7 +138,10 @@ function Layout({ children, onReset }) {
         </Link>
         <nav>
           <NavLink to="/projects" className="nav-link">
-            <Icon name="folder" /> Dự án & thành viên
+            <Icon name="folder" /> Dự án
+          </NavLink>
+          <NavLink to="/members" className="nav-link">
+            <Icon name="people" /> Thành viên
           </NavLink>
           <ProjectSwitcher />
           {NAV.map((n) => (
@@ -179,6 +184,8 @@ export default function App() {
               <Routes>
                 <Route path="/projects" element={<ProjectList />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/members" element={<MemberList />} />
+                <Route path="/members/:id" element={<MemberDetail />} />
                 <Route
                   path="/"
                   element={

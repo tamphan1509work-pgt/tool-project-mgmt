@@ -22,6 +22,9 @@ const rank = (col, values) =>
 
 const timestamps = { created_at: 'created_at', updated_at: 'updated_at' };
 
+/** Task được giao cho một người: so khớp theo tên (bỏ khoảng trắng thừa, không phân biệt hoa thường) */
+export const ASSIGNED = (col, nameExpr) => `lower(trim(${col})) = lower(trim(${nameExpr}))`;
+
 const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 
 export const meetings = {
@@ -319,22 +322,56 @@ export const members = {
       patternMessage: 'Email không hợp lệ',
     },
     phone: { type: 'string', max: 30 },
+    position: { type: 'string', max: 100 },
   },
-  selectExtra: '(SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count',
-  searchable: ['name', 'email', 'phone'],
+  selectExtra: `
+    (SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count,
+    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done') AS open_task_count,
+    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done'
+       AND t.due_date < date('now', 'localtime')) AS overdue_task_count`,
+  searchable: ['name', 'email', 'phone', 'position'],
   filterable: [],
-  sortable: { name: 'name', ...timestamps },
+  sortable: {
+    name: 'name',
+    position: "COALESCE(position, '')",
+    project_count: 'project_count',
+    open_task_count: 'open_task_count',
+    ...timestamps,
+  },
   defaultSort: 'name',
   defaultOrder: 'ASC',
   expand(db, row) {
     return {
       projects: db
         .prepare(
-          `SELECT p.id, p.code, p.name, pm.role FROM project_members pm JOIN projects p ON p.id = pm.project_id
+          `SELECT p.id, p.code, p.name, p.status, p.start_date, p.end_date, pm.role, pm.joined_at
+           FROM project_members pm JOIN projects p ON p.id = pm.project_id
            WHERE pm.member_id = ? ORDER BY p.name`,
         )
         .all(row.id),
+      tasks: db
+        .prepare(
+          `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.project_id, p.code AS project_code
+           FROM tasks t JOIN projects p ON p.id = t.project_id
+           WHERE ${ASSIGNED('t.assignee', '?')}
+           ORDER BY t.status = 'done', COALESCE(t.due_date, '9999-12-31'), t.id`,
+        )
+        .all(row.name),
     };
+  },
+  // Đổi tên thành viên -> cập nhật tên ở các nơi đang ghi tên người này
+  afterUpdate(db, row, existing) {
+    if (row.name === existing.name) return;
+    for (const [table, col] of [
+      ['tasks', 'assignee'],
+      ['bugs', 'assignee'],
+      ['bugs', 'reporter'],
+      ['meetings', 'facilitator'],
+      ['documents', 'author'],
+      ['test_runs', 'executed_by'],
+    ]) {
+      db.prepare(`UPDATE ${table} SET ${col} = ? WHERE ${ASSIGNED(col, '?')}`).run(row.name, existing.name);
+    }
   },
 };
 

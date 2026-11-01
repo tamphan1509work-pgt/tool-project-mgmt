@@ -338,3 +338,45 @@ describe('migration', () => {
     }
   });
 });
+
+describe('members & gantt', () => {
+  test('danh sách thành viên, đổi tên đồng bộ task, biểu đồ Gantt', async () => {
+    const p = (await req('POST', '/projects', { code: 'GNT', name: 'Gantt', start_date: '2026-01-01', end_date: '2026-03-31' })).body.id;
+    const p2 = (await req('POST', '/projects', { code: 'GNT2', name: 'Gantt 2' })).body.id;
+    let r = await req('POST', '/members', { name: 'Ngô Bảo', email: 'bao@x.com', position: 'Dev' });
+    assert.equal(r.status, 201);
+    const bao = r.body.id;
+    assert.equal((await req('POST', '/members', { name: 'X', email: 'sai-email' })).status, 400);
+    await req('POST', `/projects/${p}/members`, { member_id: bao, role: 'developer' });
+
+    await req('POST', '/tasks', { project_id: p, title: 'Đang làm', assignee: 'ngô bảo ', start_date: '2026-01-05', due_date: '2026-01-10' });
+    await req('POST', '/tasks', { project_id: p, title: 'Xong rồi', assignee: 'Ngô Bảo', status: 'done' });
+    await req('POST', '/tasks', { project_id: p2, title: 'Dự án khác', assignee: 'Ngô Bảo' });
+    await req('POST', '/tasks', { project_id: p, title: 'Người khác', assignee: 'Ai đó' });
+
+    r = await req('GET', '/members?q=Ngô');
+    assert.equal(r.body.items[0].open_task_count, 2);
+    assert.equal(r.body.items[0].project_count, 1);
+
+    r = await req('GET', `/gantt?member_id=${bao}`);
+    const m = r.body.members[0];
+    assert.equal(m.projects.length, 2, 'dự án thành viên + dự án có task được giao');
+    const gp = m.projects.find((x) => x.id === p);
+    assert.equal(gp.role, 'developer');
+    assert.deepEqual(gp.tasks.map((t) => t.title), ['Đang làm']);
+    assert.equal(m.projects.find((x) => x.id === p2).role, null);
+
+    r = await req('GET', `/gantt?member_id=${bao}&include_done=true&project_id=${p}`);
+    assert.equal(r.body.members[0].projects[0].tasks.length, 2);
+    r = await req('GET', `/gantt?project_id=${p}`);
+    assert.deepEqual(r.body.members.map((x) => x.id), [bao]);
+    assert.equal((await req('GET', '/gantt?member_id=99999')).status, 404);
+
+    // đổi tên -> task chuyển theo
+    await req('PATCH', `/members/${bao}`, { name: 'Ngô Gia Bảo' });
+    r = await req('GET', `/tasks?project_id=${p}&q=Xong rồi`);
+    assert.equal(r.body.items[0].assignee, 'Ngô Gia Bảo');
+    r = await req('GET', `/members/${bao}`);
+    assert.equal(r.body.tasks.length, 3);
+  });
+});

@@ -147,7 +147,9 @@ function Members({ project, reload }) {
                 <tr key={m.id}>
                   <td className="col-stt">{i + 1}</td>
                   <td>
-                    <strong>{m.name}</strong>
+                    <Link to={`/members/${m.id}`}>
+                      <strong>{m.name}</strong>
+                    </Link>
                   </td>
                   <td className="small">{m.email || <span className="muted">—</span>}</td>
                   <td>

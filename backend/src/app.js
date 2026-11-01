@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { transaction } from './db.js';
 import { createResource, HttpError, parseId, today, validate } from './resource.js';
 import {
+  ASSIGNED,
   bugs,
   documents,
   ENUMS,
@@ -153,6 +154,58 @@ export function createApp(db, { staticDir } = {}) {
       .run(projectId, parseId(req.params.memberId));
     if (!info.changes) throw new HttpError(404, 'Người này không thuộc dự án');
     res.status(204).end();
+  });
+
+  // ---- Biểu đồ Gantt: mỗi thành viên tham gia dự án nào, đang làm task nào ----
+  api.get('/gantt', (req, res) => {
+    const projectId = req.query.project_id ? requireProject(db, req.query).id : null;
+    const memberId = req.query.member_id ? parseId(req.query.member_id) : null;
+    const includeDone = req.query.include_done === 'true';
+
+    let people;
+    if (memberId) {
+      people = db.prepare('SELECT * FROM members WHERE id = ?').all(memberId);
+      if (!people.length) throw new HttpError(404, `Không tìm thấy thành viên #${memberId}`);
+    } else if (projectId) {
+      people = db
+        .prepare(
+          `SELECT m.* FROM members m JOIN project_members pm ON pm.member_id = m.id
+           WHERE pm.project_id = ? ORDER BY m.name`,
+        )
+        .all(projectId);
+    } else {
+      people = db.prepare('SELECT * FROM members ORDER BY name').all();
+    }
+
+    const projectCols = 'p.id, p.code, p.name, p.status, p.start_date, p.end_date';
+    const memberProjects = db.prepare(
+      `SELECT ${projectCols}, pm.role, pm.joined_at FROM project_members pm JOIN projects p ON p.id = pm.project_id
+       WHERE pm.member_id = ? ${projectId ? 'AND p.id = ?' : ''} ORDER BY COALESCE(p.start_date, ''), p.name`,
+    );
+    const memberTasks = db.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.completed_at, t.created_at, t.project_id
+       FROM tasks t WHERE ${ASSIGNED('t.assignee', '?')}
+       ${projectId ? 'AND t.project_id = ?' : ''} ${includeDone ? '' : "AND t.status <> 'done'"}
+       ORDER BY COALESCE(t.start_date, t.due_date, substr(t.created_at, 1, 10)), t.id`,
+    );
+    const projectById = db.prepare(`SELECT ${projectCols} FROM projects p WHERE p.id = ?`);
+
+    const members = people.map((m) => {
+      const projects = memberProjects.all(...(projectId ? [m.id, projectId] : [m.id]));
+      const tasks = memberTasks.all(...(projectId ? [m.name, projectId] : [m.name]));
+      // Task được giao ở dự án mà người này chưa là thành viên: vẫn hiển thị dự án (không có vai trò)
+      for (const pid of new Set(tasks.map((t) => t.project_id))) {
+        if (!projects.some((p) => p.id === pid)) projects.push({ ...projectById.get(pid), role: null });
+      }
+      return {
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        position: m.position,
+        projects: projects.map((p) => ({ ...p, tasks: tasks.filter((t) => t.project_id === p.id) })),
+      };
+    });
+    res.json({ today: today(), members });
   });
 
   // ---- Báo cáo test (test report) của dự án ----

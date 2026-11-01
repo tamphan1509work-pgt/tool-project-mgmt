@@ -47,6 +47,7 @@ export const api = {
   addRun: (testCaseId, data) => request('POST', `/test-cases/${testCaseId}/runs`, data),
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
   dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
+  gantt: (params) => request('GET', `/gantt${qs(params)}`),
   testReport: (params) => request('GET', `/test-report${qs(params)}`),
   lookup: (params) => request('GET', `/lookup${qs(params)}`),
   addMember: (projectId, data) => request('POST', `/projects/${projectId}/members`, data),

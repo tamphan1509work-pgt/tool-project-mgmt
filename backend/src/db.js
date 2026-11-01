@@ -138,17 +138,18 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- File đính kèm (nội dung lưu trong DB): thuộc một biên bản họp HOẶC một lần chạy test
+-- File đính kèm (nội dung lưu trong DB): thuộc đúng một biên bản họp, lần chạy test HOẶC tài liệu
 CREATE TABLE IF NOT EXISTS attachments (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   meeting_id   INTEGER REFERENCES meetings(id) ON DELETE CASCADE,
   test_run_id  INTEGER REFERENCES test_runs(id) ON DELETE CASCADE,
+  document_id  INTEGER REFERENCES documents(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
   mime_type    TEXT NOT NULL DEFAULT 'application/octet-stream',
   size         INTEGER NOT NULL,
   data         BLOB NOT NULL,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  CHECK ((meeting_id IS NULL) <> (test_run_id IS NULL))
+  CHECK ((meeting_id IS NOT NULL) + (test_run_id IS NOT NULL) + (document_id IS NOT NULL) = 1)
 );
 CREATE INDEX IF NOT EXISTS idx_attachments_meeting ON attachments(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_test_run ON attachments(test_run_id);
@@ -235,6 +236,7 @@ CREATE TABLE IF NOT EXISTS comments (
   entity_id    INTEGER NOT NULL,
   member_id    INTEGER REFERENCES members(id) ON DELETE SET NULL,
   author_name  TEXT NOT NULL,
+  parent_id    INTEGER REFERENCES comments(id) ON DELETE CASCADE,
   body         TEXT NOT NULL,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT
@@ -319,6 +321,41 @@ function migrate(db) {
     }
     db.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_category ON ${table}(category_id)`);
   }
+
+  // File đính kèm cho tài liệu: SQLite không sửa được CHECK nên dựng lại bảng attachments
+  const attachCols = db.prepare('PRAGMA table_info(attachments)').all().map((c) => c.name);
+  if (!attachCols.includes('document_id')) {
+    db.exec(`
+      CREATE TABLE attachments_new (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        meeting_id   INTEGER REFERENCES meetings(id) ON DELETE CASCADE,
+        test_run_id  INTEGER REFERENCES test_runs(id) ON DELETE CASCADE,
+        document_id  INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+        name         TEXT NOT NULL,
+        mime_type    TEXT NOT NULL DEFAULT 'application/octet-stream',
+        size         INTEGER NOT NULL,
+        data         BLOB NOT NULL,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK ((meeting_id IS NOT NULL) + (test_run_id IS NOT NULL) + (document_id IS NOT NULL) = 1)
+      );
+      INSERT INTO attachments_new (id, meeting_id, test_run_id, name, mime_type, size, data, created_at)
+        SELECT id, meeting_id, test_run_id, name, mime_type, size, data, created_at FROM attachments;
+      DROP TABLE attachments;
+      ALTER TABLE attachments_new RENAME TO attachments;
+      CREATE INDEX IF NOT EXISTS idx_attachments_meeting ON attachments(meeting_id);
+      CREATE INDEX IF NOT EXISTS idx_attachments_test_run ON attachments(test_run_id);
+    `);
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_document ON attachments(document_id)');
+
+  // Trả lời bình luận
+  const commentCols = db.prepare('PRAGMA table_info(comments)').all().map((c) => c.name);
+  if (!commentCols.includes('parent_id')) {
+    db.exec('ALTER TABLE comments ADD COLUMN parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE');
+  }
+
+  // Tài liệu bỏ "Người soạn" (trùng với Người tạo): giữ tên người soạn cũ làm người tạo nếu chưa có
+  db.exec("UPDATE documents SET created_by = author WHERE (created_by IS NULL OR created_by = '') AND author IS NOT NULL AND author <> ''");
 
   // Phiên bản trước lưu file biên bản họp ở bảng riêng -> chuyển sang bảng attachments dùng chung
   if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meeting_attachments'").get()) {

@@ -607,7 +607,6 @@ export const members = {
       ['bugs', 'assignee'],
       ['bugs', 'reporter'],
       ['meetings', 'facilitator'],
-      ['documents', 'author'],
       ['test_runs', 'executed_by'],
     ]) {
       db.prepare(`UPDATE ${table} SET ${col} = ? WHERE ${ASSIGNED(col, '?')}`).run(row.name, existing.name);
@@ -633,24 +632,27 @@ export const documents = {
     version: { type: 'string', max: 30 },
     status: { type: 'enum', values: ENUMS.documentStatus, default: 'draft' },
     url: { type: 'url' },
-    author: { type: 'string' },
     description: { type: 'text' },
   },
-  selectExtra:
-    '(SELECT COUNT(*) FROM task_documents td WHERE td.document_id = documents.id) AS task_count',
+  selectExtra: `(SELECT COUNT(*) FROM task_documents td WHERE td.document_id = documents.id) AS task_count,
+    (SELECT COUNT(*) FROM attachments a WHERE a.document_id = documents.id) AS attachment_count`,
   trackCreator: true,
-  searchable: ['title', 'description', 'author', 'version'],
-  filterable: ['project_id', 'type', 'status', 'author'],
+  searchable: ['title', 'description', 'version', 'created_by'],
+  filterable: ['project_id', 'type', 'status', 'created_by'],
   sortable: {
     title: 'title',
     type: 'type',
     status: rank('status', ENUMS.documentStatus),
     version: "COALESCE(version, '')",
+    created_by: "COALESCE(created_by, '')",
     ...timestamps,
   },
   defaultSort: 'updated_at',
   expand(db, row) {
     return {
+      attachments: db
+        .prepare('SELECT id, name, mime_type, size, created_at FROM attachments WHERE document_id = ? ORDER BY id')
+        .all(row.id),
       tasks: db
         .prepare(
           `SELECT t.id, t.title, t.status, t.assignee FROM tasks t

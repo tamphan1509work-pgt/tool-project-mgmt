@@ -261,7 +261,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   const taskCode = (id) => `TASK-${String(id).padStart(3, '0')}`;
 
   // ---- File đính kèm: biên bản họp và lần chạy test ----
-  const ATTACH_COLS = 'id, meeting_id, test_run_id, name, mime_type, size, created_at';
+  const ATTACH_COLS = 'id, meeting_id, test_run_id, document_id, name, mime_type, size, created_at';
   const addAttachment = (ownerCol, ownerId, body = {}) => {
     const name = typeof body.name === 'string' ? body.name.replace(/[\\/\u0000-\u001f]/g, '_').trim() : '';
     if (!name || name.length > 255) throw new HttpError(400, 'Dữ liệu không hợp lệ', { name: 'Tên file không hợp lệ' });
@@ -287,6 +287,17 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     }
     const file = addAttachment('meeting_id', meetingId, req.body);
     logAction(req, 'meetings', meetingId, projectOf('meetings', meetingId), 'attach', `Đính kèm file "${file.name}"`);
+    res.status(201).json(file);
+  });
+
+  api.post('/documents/:id/attachments', (req, res) => {
+    const docId = parseId(req.params.id);
+    if (!db.prepare('SELECT 1 FROM documents WHERE id = ?').get(docId)) {
+      throw new HttpError(404, `Không tìm thấy tài liệu #${docId}`);
+    }
+    const file = addAttachment('document_id', docId, req.body);
+    logAction(req, 'documents', docId, projectOf('documents', docId), 'attach', `Đính kèm file "${file.name}"`);
+    db.prepare("UPDATE documents SET updated_at = datetime('now') WHERE id = ?").run(docId);
     res.status(201).json(file);
   });
 
@@ -328,7 +339,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     const id = parseId(req.params.id);
     const file = db
       .prepare(
-        `SELECT a.name, a.meeting_id, r.test_case_id FROM attachments a
+        `SELECT a.name, a.meeting_id, a.document_id, r.test_case_id FROM attachments a
          LEFT JOIN test_runs r ON r.id = a.test_run_id WHERE a.id = ?`,
       )
       .get(id);
@@ -336,6 +347,8 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     db.prepare('DELETE FROM attachments WHERE id = ?').run(id);
     if (file.meeting_id) {
       logAction(req, 'meetings', file.meeting_id, projectOf('meetings', file.meeting_id), 'detach', `Xoá file "${file.name}"`);
+    } else if (file.document_id) {
+      logAction(req, 'documents', file.document_id, projectOf('documents', file.document_id), 'detach', `Xoá file "${file.name}"`);
     } else if (file.test_case_id) {
       const pid = projectOf('test_cases', file.test_case_id);
       logAction(req, 'test-cases', file.test_case_id, pid, 'detach', `Xoá file "${file.name}"`);
@@ -693,7 +706,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     if (body.length > 5000) throw new HttpError(400, 'Dữ liệu không hợp lệ', { body: 'Tối đa 5000 ký tự' });
     return body;
   };
-  const COMMENT_SELECT = `SELECT c.id, c.entity, c.entity_id, c.member_id, c.author_name, c.body, c.created_at, c.updated_at,
+  const COMMENT_SELECT = `SELECT c.id, c.entity, c.entity_id, c.member_id, c.author_name, c.parent_id, c.body, c.created_at, c.updated_at,
       m.email AS author_email, m.avatar AS author_avatar
     FROM comments c LEFT JOIN members m ON m.id = c.member_id`;
   const getComment = (id) => db.prepare(`${COMMENT_SELECT} WHERE c.id = ?`).get(id);
@@ -717,9 +730,20 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     if (!isMember && !req.user.is_admin) {
       throw new HttpError(403, 'Chỉ thành viên của dự án mới bình luận được');
     }
+    // Trả lời: luôn gắn vào bình luận gốc (chỉ một cấp trả lời)
+    let parentId = null;
+    if (req.body.parent_id != null && req.body.parent_id !== '') {
+      const parent = getComment(parseId(req.body.parent_id));
+      if (!parent || parent.entity !== entity || parent.entity_id !== target.id) {
+        throw new HttpError(400, 'Dữ liệu không hợp lệ', { parent_id: 'Bình luận được trả lời không tồn tại' });
+      }
+      parentId = parent.parent_id ?? parent.id;
+    }
     const info = db
-      .prepare('INSERT INTO comments (project_id, entity, entity_id, member_id, author_name, body) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(target.project_id, entity, target.id, req.user.id, req.user.name, commentBody(req.body.body));
+      .prepare(
+        'INSERT INTO comments (project_id, entity, entity_id, member_id, author_name, parent_id, body) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(target.project_id, entity, target.id, req.user.id, req.user.name, parentId, commentBody(req.body.body));
     res.status(201).json(getComment(Number(info.lastInsertRowid)));
   });
 
@@ -738,7 +762,8 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     if (c.member_id !== req.user.id && !req.user.is_admin) {
       throw new HttpError(403, 'Chỉ người viết hoặc quản trị viên mới xoá được bình luận');
     }
-    db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
+    // Xoá bình luận gốc thì xoá luôn các trả lời
+    db.prepare('DELETE FROM comments WHERE id = ? OR parent_id = ?').run(c.id, c.id);
     res.status(204).end();
   });
 
@@ -828,11 +853,10 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
            SELECT assignee FROM tasks WHERE project_id = ? UNION
            SELECT assignee FROM bugs WHERE project_id = ? UNION
            SELECT reporter FROM bugs WHERE project_id = ? UNION
-           SELECT facilitator FROM meetings WHERE project_id = ? UNION
-           SELECT author FROM documents WHERE project_id = ?
+           SELECT facilitator FROM meetings WHERE project_id = ?
          ) WHERE name IS NOT NULL AND name <> '' ORDER BY name`,
       )
-      .all(id, id, id, id, id, id)
+      .all(id, id, id, id, id)
       .map((r) => r.name);
     res.json({
       projects: allProjects,

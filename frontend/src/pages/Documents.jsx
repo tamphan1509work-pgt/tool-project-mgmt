@@ -1,3 +1,5 @@
+import Attachments, { useUploader } from '../components/Attachments.jsx';
+import { PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import DetailPage, { InfoList, LinkedList, Section } from '../components/DetailPage.jsx';
@@ -23,6 +25,7 @@ export function DocLink({ url, children = 'Mở ↗' }) {
 }
 
 export function DocumentList() {
+  const upload = useUploader();
   const [params, setParam] = useParamSetter();
   const type = params.get('type') ?? '';
   return (
@@ -42,14 +45,15 @@ export function DocumentList() {
       </div>
       <ResourceList
         resource="documents"
+        onFiles={(doc, files) => upload('documents', doc.id, files)}
         noun={type === 'design' ? 'tài liệu thiết kế' : type === 'specification' ? 'tài liệu đặc tả' : 'tài liệu'}
         formFields={documentFields}
         defaultValues={type ? { type } : undefined}
         persistentParams={['type']}
-        searchPlaceholder="Tìm theo tên, mô tả, người soạn, phiên bản…"
+        searchPlaceholder="Tìm theo tên, mô tả, người tạo, phiên bản…"
         filters={[
           { name: 'status', label: 'Trạng thái', options: options('documentStatus') },
-          { name: 'author', label: 'Người soạn', source: 'people' },
+          { name: 'created_by', label: 'Người tạo', source: 'people' },
           categoryFilter,
         ]}
         columns={[
@@ -80,9 +84,29 @@ export function DocumentList() {
             render: (d) => <Badge kind="documentStatus" value={d.status} />,
           },
           { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
-          { key: 'author', title: 'Người soạn', width: 150 },
+          {
+            key: 'created_by',
+            title: 'Người tạo',
+            sort: 'created_by',
+            width: 90,
+            render: (d) => <PersonAvatar name={d.created_by} />,
+          },
           { key: 'task_count', title: 'Task liên kết', width: 100, className: 'num' },
-          { key: 'url', title: 'Link', width: 70, render: (d) => <DocLink url={d.url} /> },
+          {
+            key: 'url',
+            title: 'Link / File',
+            width: 110,
+            render: (d) => (
+              <span className="doc-sources">
+                <DocLink url={d.url} />
+                {d.attachment_count > 0 && (
+                  <span className="badge badge-gray" title={`${d.attachment_count} file đính kèm`}>
+                    📎 {d.attachment_count}
+                  </span>
+                )}
+              </span>
+            ),
+          },
         ]}
       />
     </>
@@ -90,9 +114,11 @@ export function DocumentList() {
 }
 
 export function DocumentDetail() {
+  const upload = useUploader();
   return (
     <DetailPage
       resource="documents"
+      onFiles={(doc, files) => upload('documents', doc.id, files)}
       backLabel="Danh sách tài liệu"
       historyTab
       formFields={documentFields}
@@ -111,12 +137,13 @@ export function DocumentDetail() {
         )
       }
     >
-      {(d) => (
+      {(d, { reload }) => (
         <div className="detail-grid">
           <div className="detail-main">
             <Section title="Mô tả / Tóm tắt nội dung">
               <Prose text={d.description} placeholder="Chưa có mô tả" />
             </Section>
+            <Attachments record={d} target="documents" title="File đính kèm" reload={reload} />
             <Section title={`Task sử dụng tài liệu này (${d.tasks.length})`}>
               <LinkedList
                 resource="tasks"
@@ -136,11 +163,10 @@ export function DocumentDetail() {
               <InfoList
                 items={[
                   ['Danh mục', <CategoryBadge key="c" id={d.category_id} full />],
-                  ['Người soạn', d.author],
-                  ['Người tạo', d.created_by],
+                  ['Người tạo', d.created_by && <PersonAvatar key="p" name={d.created_by} showName />],
                   ['Thời gian tạo', fmtDateTime(d.created_at)],
                   ['Phiên bản', d.version && `v${d.version}`],
-                  ['Link', d.url && <DocLink url={d.url}>{d.url}</DocLink>],
+                  ['Link bên ngoài', d.url && <DocLink url={d.url}>{d.url}</DocLink>],
                   ['Cập nhật', fmtDateTime(d.updated_at)],
                 ]}
               />

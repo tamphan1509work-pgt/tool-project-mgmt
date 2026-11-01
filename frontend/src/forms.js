@@ -179,13 +179,19 @@ export const documentFields = [
   },
   { name: 'version', label: 'Phiên bản', placeholder: 'VD: 1.0' },
   { name: 'category_id', label: 'Danh mục', type: 'category' },
-  { name: 'author', label: 'Người soạn', type: 'person' },
   {
     name: 'url',
-    label: 'Link tài liệu',
+    label: 'Link bên ngoài',
     type: 'url',
     full: true,
     placeholder: 'https://… (Google Drive, Figma, Confluence…)',
+    hint: 'Có thể dùng link bên ngoài, đính kèm file bên dưới, hoặc cả hai.',
+  },
+  {
+    name: 'files',
+    label: 'File đính kèm',
+    type: 'files',
+    hint: 'File được tải lên sau khi lưu tài liệu. File đã đính kèm xem và xoá ở trang chi tiết.',
   },
   { name: 'description', label: 'Mô tả / Tóm tắt nội dung', type: 'textarea', rows: 4 },
 ];

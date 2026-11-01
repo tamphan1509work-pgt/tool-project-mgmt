@@ -298,16 +298,17 @@ export function AddFilesButton({ target, id, onDone, label = 'Thêm file' }) {
 }
 
 /**
- * Tệp đính kèm của biên bản họp: bảng file + kéo thả để tải lên ngay.
+ * Tệp đính kèm của biên bản họp / tài liệu: bảng file + kéo thả để tải lên ngay.
+ * target: 'meetings' | 'documents'
  */
-export default function Attachments({ meeting, reload }) {
+export default function Attachments({ meeting, record = meeting, target = 'meetings', title = 'Tệp đính kèm', reload }) {
   const { open, download, remove, setPreview, previewModal } = useFileActions(reload);
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState(null);
   const toast = useToast();
   const maxBytes = useUploadLimit();
-  const files = meeting.attachments;
+  const files = record.attachments;
 
   const upload = async (list) => {
     const chosen = [...list];
@@ -316,7 +317,7 @@ export default function Attachments({ meeting, reload }) {
     if (tooBig.length) toast(`Bỏ qua ${tooBig.map((f) => f.name).join(', ')}: vượt quá ${fmtSize(maxBytes)}`, 'error');
     if (!ok.length) return;
     setProgress({ done: 0, total: ok.length });
-    const { uploaded, errors } = await uploadFiles('meetings', meeting.id, ok, (done, total) =>
+    const { uploaded, errors } = await uploadFiles(target, record.id, ok, (done, total) =>
       setProgress({ done, total }),
     );
     setProgress(null);
@@ -326,7 +327,7 @@ export default function Attachments({ meeting, reload }) {
   };
 
   return (
-    <Section title={`Tệp đính kèm (${files.length})`}>
+    <Section title={`${title} (${files.length})`}>
       {files.length > 0 && (
         <div className="table-wrap">
           <table className="table compact">

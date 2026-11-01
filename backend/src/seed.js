@@ -603,8 +603,9 @@ export function seed(db, { reset = false } = {}) {
     hist('projects', pay, 'member', 'Thêm thành viên "Đỗ Quang Minh" (Designer)', null, 'Nguyễn Văn An', -20, '03:00:00');
 
     // ---------- Bình luận ----------
-    const comment = (entity, entityId, name, body, offset, time) =>
+    const comment = (entity, entityId, name, body, offset, time, parentId = null) =>
       insert('comments', {
+        parent_id: parentId,
         project_id: pay,
         entity,
         entity_id: entityId,
@@ -613,12 +614,22 @@ export function seed(db, { reset = false } = {}) {
         body,
         created_at: `${day(offset)} ${time}`,
       });
-    comment('tasks', t2, 'Nguyễn Văn An', 'Huy ước lượng giúp anh phần callback cần thêm bao lâu nhé?', -3, '02:10:00');
-    comment('tasks', t2, 'Hoàng Gia Huy', 'Khoảng 1 ngày nữa ạ, em đang chờ NAPAS cấp môi trường sandbox.', -3, '02:45:00');
+    const c1 = comment('tasks', t2, 'Nguyễn Văn An', 'Huy ước lượng giúp anh phần callback cần thêm bao lâu nhé?', -3, '02:10:00');
+    comment('tasks', t2, 'Hoàng Gia Huy', 'Khoảng 1 ngày nữa ạ, em đang chờ NAPAS cấp môi trường sandbox.', -3, '02:45:00', c1);
+    comment('tasks', t2, 'Nguyễn Văn An', '@Hoàng Gia Huy Ok em, có sandbox thì báo anh nhé.', -3, '03:05:00', c1);
     comment('tasks', t2, 'Phạm Thu Dung', 'Bên QA đã sẵn test case TC-001, khi nào lên staging em test ngay.', -1, '08:30:00');
     comment('tasks', t3, 'Vũ Ngọc Lan', 'Màn hình OTP đang chờ API của Huy merge xong.', -1, '03:00:00');
     comment('bugs', 1, 'Phạm Thu Dung', 'Đã tái hiện được trên Chrome và Safari, đính kèm video ở lần chạy test.', -2, '04:00:00');
-    comment('bugs', 1, 'Vũ Ngọc Lan', 'Em đã tìm ra nguyên nhân: bộ đếm sai bị reset khi gửi lại OTP. Đang sửa.', -1, '07:20:00');
+    const cb = db.prepare("SELECT id FROM comments WHERE entity = 'bugs' AND entity_id = 1").get().id;
+    comment('bugs', 1, 'Vũ Ngọc Lan', 'Em đã tìm ra nguyên nhân: bộ đếm sai bị reset khi gửi lại OTP. Đang sửa.', -1, '07:20:00', cb);
+
+    // ---------- File đính kèm của tài liệu ----------
+    const docFile = (document_id, name, mime_type, text) => {
+      const data = new TextEncoder().encode(text);
+      insert('attachments', { document_id, name, mime_type, size: data.length, data });
+    };
+    docFile(dSrs, 'SRS-cong-thanh-toan-v1.2.md', 'text/markdown', '# SRS – Cổng thanh toán v1.2\n\n1. Phạm vi\n2. Yêu cầu chức năng\n3. Yêu cầu phi chức năng\n');
+    docFile(dApi, 'payment-api.yaml', 'application/x-yaml', 'openapi: 3.0.0\ninfo:\n  title: Payment API\n  version: 1.0.0\n');
 
     // ---------- Người tạo & người yêu cầu ----------
     db.prepare("UPDATE tasks SET created_by = 'Nguyễn Văn An', requester = 'Trần Thị Bình' WHERE project_id = ?").run(pay);

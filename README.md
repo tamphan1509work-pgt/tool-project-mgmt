@@ -14,13 +14,13 @@
 | **Task** | Trạng thái: **To Do → In Progress → Done Dev → Testing → Ready Release → Released**, hoặc **Canceled** (Released / Canceled = đã đóng). Danh sách có **nhãn lọc trạng thái kèm số lượng** (nằm dưới các bộ lọc khác), cột PIC, Người yêu cầu, Người tạo, Thời gian tạo; dạng bảng hoặc Kanban kéo-thả. **Mô tả dùng trình soạn thảo**: định dạng chữ, tiêu đề, danh sách đánh số / gạch đầu dòng, bảng, ảnh (chọn, dán hoặc kéo thả), liên kết, trích dẫn, khối mã — nội dung được lọc mã độc (DOMPurify) khi hiển thị. Trang chi tiết có các tab **Chi tiết** (mô tả, subtask, tài liệu liên quan, task liên quan / phụ thuộc), **Test case**, **Bug**, **Bình luận**, **Lịch sử thay đổi** |
 | **Test report** | Danh sách có **nhãn lọc kết quả kèm số lượng** (Chưa chạy / Đạt / Không đạt / Bị chặn), cột Người tạo, Thời gian tạo; chi tiết có tab **Bình luận** và Lịch sử thay đổi. Hai tab: **Danh sách test case** và **Thống kê** (tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module / độ ưu tiên / loại test / người thực hiện, các lần chạy gần đây); danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
 | **Bug** | **Nhãn lọc trạng thái kèm số lượng**, cột Người báo bug, Người tạo, Thời gian tạo; chi tiết có tab **Bình luận** và Lịch sử thay đổi. Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
-| **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
+| **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người tạo (tự ghi theo tài khoản), nội dung là **link bên ngoài** (Drive, Figma, Confluence…) và / hoặc **file đính kèm** (chọn ngay khi tạo hoặc kéo thả ở trang chi tiết, xem trước / tải về), danh sách task đang dùng tài liệu |
 
 Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Menu trái **thu gọn / mở rộng** được (nút ☰ hoặc "Thu gọn menu"; chỉ còn icon, có chú thích khi rê chuột) và được ghi nhớ. Dự án đang làm việc được chọn ở thanh bên trái.
 
 Mọi mục (biên bản, task, test case, bug, tài liệu, dự án, thành viên) có nút **Copy link** ở trang chi tiết và trên từng dòng danh sách: người nhận mở link là vào thẳng mục đó (tự chuyển sang đúng dự án). Bản demo dùng link artifact kèm `#tasks-12` (đặt link gốc qua biến `VITE_SHARE_URL` khi build demo).
 
-Cột **Người tạo** và **PIC** hiển thị avatar, rê chuột vào hiện họ tên và email. **Bình luận** (Task, Test report, Bug): thành viên của dự án trao đổi trong tab Bình luận (Ctrl + Enter để gửi), sửa bình luận của mình, xoá bình luận của mình (quản trị viên xoá được mọi bình luận).
+Cột **Người tạo** và **PIC** hiển thị avatar, rê chuột vào hiện họ tên và email. **Bình luận** (Task, Test report, Bug): thành viên của dự án trao đổi trong tab Bình luận (Ctrl + Enter để gửi), **trả lời** từng bình luận (hiện thành luồng; trả lời một câu trả lời sẽ tự gắn `@tên` người được trả lời; xoá bình luận gốc xoá luôn các trả lời), sửa bình luận của mình, xoá bình luận của mình (quản trị viên xoá được mọi bình luận).
 
 Thời gian hiển thị theo định dạng `dd/mm/yyyy hh:mm:ss`. Người tạo được ghi tự động theo tài khoản đăng nhập. Mọi bảng có cột **STT**; danh sách hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL.
 
@@ -124,7 +124,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | POST | `/test-cases/:id/runs` | Ghi nhận một lần chạy test `{ result: passed\|failed\|blocked, note, executed_by }` – tự cập nhật trạng thái test case |
 | GET | `/test-cases/:id/runs` | Lịch sử chạy |
 | DELETE | `/test-runs/:id` | Xoá một lần chạy (trạng thái test case được tính lại) |
-| POST | `/meetings/:id/attachments` | Đính kèm file `{ name, mime_type, data }` (`data` là base64) |
+| POST | `/meetings/:id/attachments`, `/documents/:id/attachments` | Đính kèm file `{ name, mime_type, data }` (`data` là base64) |
 | POST | `/test-runs/:id/attachments` | Đính kèm file vào một lần chạy test (cùng định dạng) |
 | GET | `/attachments/:id/download` | Tải file (`?inline=1` để xem ảnh trực tiếp) |
 | DELETE | `/attachments/:id` | Xoá file |
@@ -133,7 +133,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | GET | `/tasks?counts=status` | Kèm `counts`: số task theo trạng thái (theo các bộ lọc khác, bỏ qua bộ lọc trạng thái) |
 | GET | `/{resource}?category_id=` | Lọc task / test case / bug / tài liệu theo danh mục (gồm danh mục con; `none` = chưa phân loại) |
 | GET | `/history?entity=tasks&entity_id=12` hoặc `?project_id=` | Lịch sử thay đổi của một mục / cả dự án. Người thao tác lấy theo tài khoản đăng nhập |
-| GET / POST | `/comments?entity=tasks&entity_id=12` | Bình luận của task / test case (`test-cases`) / bug; gửi: `{ entity, entity_id, body }` (thành viên dự án hoặc quản trị viên) |
+| GET / POST | `/comments?entity=tasks&entity_id=12` | Bình luận của task / test case (`test-cases`) / bug; gửi: `{ entity, entity_id, body, parent_id? }` (`parent_id` để trả lời) (thành viên dự án hoặc quản trị viên) |
 | PATCH / DELETE | `/comments/:id` | Sửa (tác giả) / xoá (tác giả hoặc quản trị viên) bình luận |
 | GET / PUT | `/settings` | Cài đặt thông báo |
 | GET | `/notifications?project_id=` | Task / milestone trễ hoặc sắp đến hạn (thông báo web) |

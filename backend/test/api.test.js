@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, before, describe, test } from 'node:test';
 import { createApp } from '../src/app.js';
@@ -973,5 +973,66 @@ describe('comments, avatar, status chips', () => {
     assert.ok(r.body.items.every((x) => x.status === 'passed'));
     r = await req('GET', `/bugs?project_id=${pay}&counts=status`);
     assert.ok(r.body.counts.new >= 1);
+  });
+});
+
+describe('comment replies & document attachments', () => {
+  test('trả lời bình luận gắn vào bình luận gốc; xoá gốc xoá luôn trả lời', async () => {
+    const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
+    const t = (await req('POST', '/tasks', { project_id: pay, title: 'Có trả lời' })).body;
+    const other = (await req('POST', '/tasks', { project_id: pay, title: 'Task khác' })).body;
+    const root = (await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'Gốc' })).body;
+    assert.equal(root.parent_id, null);
+    const r1 = (await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'Trả lời 1', parent_id: root.id })).body;
+    assert.equal(r1.parent_id, root.id);
+    // trả lời một câu trả lời -> vẫn gắn vào gốc
+    const r2 = (await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'Trả lời 2', parent_id: r1.id })).body;
+    assert.equal(r2.parent_id, root.id);
+    // không trả lời được bình luận của mục khác / không tồn tại
+    assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: other.id, body: 'x', parent_id: root.id })).status, 400);
+    assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'x', parent_id: 999999 })).status, 400);
+    assert.equal((await req('GET', `/comments?entity=tasks&entity_id=${t.id}`)).body.length, 3);
+    assert.equal((await req('DELETE', `/comments/${root.id}`)).status, 204);
+    assert.equal((await req('GET', `/comments?entity=tasks&entity_id=${t.id}`)).body.length, 0);
+  });
+
+  test('tài liệu: không còn người soạn, có link ngoài hoặc file đính kèm', async () => {
+    const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
+    const d = (await req('POST', '/documents', { project_id: pay, title: 'Chỉ có file', author: 'Ai đó' })).body;
+    assert.ok(!d.author, 'bỏ trường người soạn');
+    assert.ok(d.created_by);
+    const data = Buffer.from('nội dung đặc tả').toString('base64');
+    let r = await req('POST', `/documents/${d.id}/attachments`, { name: 'spec.txt', mime_type: 'text/plain', data });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.document_id, d.id);
+    const fileId = r.body.id;
+    r = await req('GET', `/documents/${d.id}`);
+    assert.equal(r.body.attachments.length, 1);
+    assert.equal(r.body.attachment_count, 1);
+    assert.equal((await req('POST', '/documents/999999/attachments', { name: 'a.txt', data })).status, 404);
+    const hist = (await req('GET', `/history?entity=documents&entity_id=${d.id}`)).body;
+    assert.ok(hist.items.some((h) => h.action === 'attach'));
+    assert.equal((await req('DELETE', `/attachments/${fileId}`)).status, 204);
+    await req('POST', `/documents/${d.id}/attachments`, { name: 'b.txt', data });
+    await req('DELETE', `/documents/${d.id}`);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE document_id = ?').get(d.id).n, 0);
+  });
+
+  test('nâng cấp bảng attachments cũ (CHECK 2 cột) giữ nguyên dữ liệu', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'pm-')), 'old.db');
+    const old = new DatabaseSync(file);
+    old.exec(`CREATE TABLE meetings (id INTEGER PRIMARY KEY, title TEXT NOT NULL, meeting_date TEXT NOT NULL);
+      CREATE TABLE attachments (id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id INTEGER, test_run_id INTEGER, name TEXT NOT NULL,
+        mime_type TEXT NOT NULL DEFAULT 'application/octet-stream', size INTEGER NOT NULL, data BLOB NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), CHECK ((meeting_id IS NULL) <> (test_run_id IS NULL)));
+      INSERT INTO meetings (id, title, meeting_date) VALUES (1, 'Họp', '2026-01-01');
+      INSERT INTO attachments (meeting_id, name, size, data) VALUES (1, 'a.txt', 1, x'41');`);
+    old.close();
+    const db2 = openDb(file);
+    const row = db2.prepare('SELECT * FROM attachments').get();
+    assert.equal(row.name, 'a.txt');
+    assert.equal(row.document_id, null);
+    db2.close();
+    rmSync(dirname(file), { recursive: true, force: true });
   });
 });

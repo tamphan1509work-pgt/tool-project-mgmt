@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../auth.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 const IS_DEMO = import.meta.env.MODE === 'demo';
 const DEMO_ACCOUNTS = [
@@ -7,26 +8,6 @@ const DEMO_ACCOUNTS = [
   ['binh.tran@example.com', 'Trần Thị Bình', 'BA'],
   ['dung.pham@example.com', 'Phạm Thu Dung', 'Tester'],
 ];
-
-function PasswordInput({ id, value, onChange, autoComplete, placeholder }) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="password-input">
-      <input
-        id={id}
-        type={show ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        required
-      />
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShow((v) => !v)} aria-pressed={show}>
-        {show ? 'Ẩn' : 'Hiện'}
-      </button>
-    </div>
-  );
-}
 
 /** Màn hình đăng nhập (hoặc tạo tài khoản quản trị đầu tiên khi hệ thống chưa có tài khoản) */
 export default function LoginPage() {

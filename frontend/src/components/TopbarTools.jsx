@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { code, fmtDate } from '../constants.js';
 import { useConfirm, useProject, useToast } from '../context.jsx';
+import PasswordInput from './PasswordInput.jsx';
 import { Icon, Modal } from './ui.jsx';
 
 function ChangePasswordModal({ onClose }) {
@@ -31,13 +32,11 @@ function ChangePasswordModal({ onClose }) {
   const field = (name, label, autoComplete) => (
     <div className="field">
       <label htmlFor={`pw-${name}`}>{label}</label>
-      <input
+      <PasswordInput
         id={`pw-${name}`}
-        type="password"
         autoComplete={autoComplete}
         value={form[name]}
-        onChange={(e) => setForm({ ...form, [name]: e.target.value })}
-        required
+        onChange={(v) => setForm({ ...form, [name]: v })}
       />
       {errors[name] && <div className="field-error">{errors[name]}</div>}
     </div>

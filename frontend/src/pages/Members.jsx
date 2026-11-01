@@ -4,7 +4,8 @@ import { api } from '../api.js';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import Gantt, { ZOOMS } from '../components/Gantt.jsx';
 import ResourceList, { useParamSetter } from '../components/ResourceList.jsx';
-import { Badge, ErrorBox, Loading, Modal } from '../components/ui.jsx';
+import { Badge, ErrorBox, Icon, Loading, Modal } from '../components/ui.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 import { code, fmtDate, fmtDateTime, isOverdue } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import { useAuth } from '../auth.jsx';
@@ -78,6 +79,215 @@ function GanttView() {
   );
 }
 
+/** Công tắc Bật / Tắt (role="switch") */
+function Switch({ checked, onChange, label, disabled }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      className={`switch-btn ${checked ? 'on' : ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+    >
+      <span className="switch-knob" />
+    </button>
+  );
+}
+
+const ROLE_FILTERS = [
+  {
+    name: 'role',
+    label: 'Tài khoản',
+    options: [
+      { value: 'member', label: 'Thành viên' },
+      { value: 'admin', label: 'Quản trị viên' },
+    ],
+  },
+  {
+    name: 'status',
+    label: 'Trạng thái',
+    options: [
+      { value: 'active', label: 'Active' },
+      { value: 'inactive', label: 'Inactive' },
+    ],
+  },
+];
+
+/** Bảng thành viên: chức danh, tài khoản (Thành viên / Quản trị viên), trạng thái Active / Inactive */
+function MemberTable({ onChanged }) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const isAdmin = Boolean(user?.is_admin);
+  const [version, setVersion] = useState(0);
+  const [pwFor, setPwFor] = useState(null); // { member, activate }
+  const refresh = () => setVersion((v) => v + 1);
+
+  const isActive = (m) => Boolean(m.has_account) && !m.account_disabled;
+
+  const setActive = async (m, on) => {
+    if (on && !m.has_account) {
+      // Chưa có tài khoản: cần đặt mật khẩu để kích hoạt
+      if (!m.email) {
+        toast(`${m.name} chưa có email (dùng để đăng nhập). Hãy thêm email trước.`, 'error');
+        return;
+      }
+      setPwFor({ member: m, activate: true });
+      return;
+    }
+    if (
+      !on &&
+      !(await confirm(`Tắt tài khoản của ${m.name}? Người này sẽ không đăng nhập được cho tới khi bật lại.`, {
+        confirmLabel: 'Tắt tài khoản',
+      }))
+    )
+      return;
+    try {
+      await api.saveAccount(m.id, { disabled: !on });
+      toast(on ? `Đã bật tài khoản của ${m.name}` : `Đã tắt tài khoản của ${m.name}`);
+      refresh();
+    } catch (err) {
+      toast(Object.values(err.details ?? {})[0] ?? err.message, 'error');
+    }
+  };
+
+  const savePassword = async (password) => {
+    const { member, activate } = pwFor;
+    await api.saveAccount(member.id, activate ? { password, disabled: false } : { password });
+    toast(
+      !member.has_account ? `Đã tạo tài khoản và kích hoạt cho ${member.name}` : `Đã đổi mật khẩu của ${member.name}`,
+    );
+    setPwFor(null);
+    refresh();
+  };
+
+  return (
+    <>
+      <ResourceList
+        resource="members"
+        noun="thành viên"
+        scoped={false}
+        formFields={memberFields}
+        nameOf={(m) => m.name}
+        onChanged={() => {
+          onChanged();
+          refresh();
+        }}
+        reloadKey={version}
+        filters={ROLE_FILTERS}
+        searchPlaceholder="Tìm theo tên, chức danh, email, số điện thoại…"
+        rowActions={(m) =>
+          isAdmin && (
+            <button
+              className="icon-btn"
+              title={m.has_account ? 'Đổi mật khẩu' : 'Tạo tài khoản đăng nhập'}
+              aria-label={m.has_account ? `Đổi mật khẩu của ${m.name}` : `Tạo tài khoản cho ${m.name}`}
+              onClick={() =>
+                m.email || m.has_account
+                  ? setPwFor({ member: m, activate: false })
+                  : toast(`${m.name} chưa có email (dùng để đăng nhập).`, 'error')
+              }
+            >
+              <Icon name="key" size={16} />
+            </button>
+          )
+        }
+        columns={[
+          { key: 'name', title: 'Họ tên', sort: 'name', className: 'nowrap', render: (m) => <strong>{m.name}</strong> },
+          {
+            key: 'position',
+            title: 'Chức danh',
+            sort: 'position',
+            width: 180,
+            render: (m) => m.position || <span className="muted">—</span>,
+          },
+          { key: 'email', title: 'Email', width: 210, className: 'small' },
+          { key: 'phone', title: 'Điện thoại', width: 120, className: 'small nowrap' },
+          {
+            key: 'is_admin',
+            title: 'Tài khoản',
+            width: 130,
+            render: (m) =>
+              m.is_admin ? (
+                <span className="badge badge-purple">Quản trị viên</span>
+              ) : (
+                <span className="badge badge-gray">Thành viên</span>
+              ),
+          },
+          {
+            key: 'status',
+            title: 'Trạng thái',
+            width: 130,
+            render: (m) => {
+              const active = isActive(m);
+              const canToggle = isAdmin && m.id !== user?.id;
+              return (
+                <span className="status-cell" onClick={(e) => e.stopPropagation()}>
+                  {canToggle && (
+                    <Switch
+                      checked={active}
+                      onChange={(on) => setActive(m, on)}
+                      label={active ? `Tắt tài khoản của ${m.name}` : `Bật tài khoản của ${m.name}`}
+                    />
+                  )}
+                  {canToggle ? (
+                    <span className={`status-text ${active ? 'is-active' : ''}`}>{active ? 'Active' : 'Inactive'}</span>
+                  ) : (
+                    <span className={`badge ${active ? 'badge-green' : 'badge-gray'}`}>
+                      {active ? 'Active' : 'Inactive'}
+                    </span>
+                  )}
+                </span>
+              );
+            },
+          },
+          { key: 'project_count', title: 'Số dự án', sort: 'project_count', width: 90, className: 'num' },
+          {
+            key: 'open_task_count',
+            title: 'Task đang làm',
+            sort: 'open_task_count',
+            width: 120,
+            className: 'num',
+            render: (m) => (
+              <>
+                {m.open_task_count}
+                {m.overdue_task_count > 0 && (
+                  <span className="text-danger small" title="Task quá hạn">
+                    {' '}
+                    ({m.overdue_task_count} trễ)
+                  </span>
+                )}
+              </>
+            ),
+          },
+        ]}
+      />
+      {pwFor && (
+        <SetPasswordModal
+          title={
+            pwFor.member.has_account
+              ? `Đổi mật khẩu của ${pwFor.member.name}`
+              : `Tạo tài khoản cho ${pwFor.member.name}`
+          }
+          hint={
+            pwFor.member.has_account
+              ? 'Mật khẩu mới có hiệu lực ngay; các phiên đăng nhập hiện tại của thành viên này sẽ bị đăng xuất.'
+              : `Thành viên đăng nhập bằng email ${pwFor.member.email} và mật khẩu này.`
+          }
+          onClose={() => setPwFor(null)}
+          onSave={savePassword}
+        />
+      )}
+    </>
+  );
+}
+
 export function MemberList() {
   const [params, setParam] = useParamSetter();
   const { refreshLookup } = useLookup();
@@ -97,68 +307,7 @@ export function MemberList() {
           </button>
         ))}
       </div>
-      {view === 'gantt' ? (
-        <GanttView />
-      ) : (
-        <ResourceList
-          resource="members"
-          noun="thành viên"
-          scoped={false}
-          formFields={memberFields}
-          nameOf={(m) => m.name}
-          onChanged={refreshLookup}
-          searchPlaceholder="Tìm theo tên, chức danh, email, số điện thoại…"
-          columns={[
-            {
-              key: 'name',
-              title: 'Họ tên',
-              sort: 'name',
-              render: (m) => (
-                <div className="person-cell">
-                  <strong>{m.name}</strong>
-                  {m.position && <span className="muted small">{m.position}</span>}
-                </div>
-              ),
-            },
-            { key: 'email', title: 'Email', width: 220, className: 'small' },
-            {
-              key: 'has_account',
-              title: 'Tài khoản',
-              width: 130,
-              render: (m) =>
-                !m.has_account ? (
-                  <span className="muted small">Chưa có</span>
-                ) : m.account_disabled ? (
-                  <span className="badge badge-red">Đã khoá</span>
-                ) : m.is_admin ? (
-                  <span className="badge badge-purple">Quản trị</span>
-                ) : (
-                  <span className="badge badge-green">Đăng nhập được</span>
-                ),
-            },
-            { key: 'phone', title: 'Điện thoại', width: 130, className: 'small' },
-            { key: 'project_count', title: 'Số dự án', sort: 'project_count', width: 100, className: 'num' },
-            {
-              key: 'open_task_count',
-              title: 'Task đang làm',
-              sort: 'open_task_count',
-              width: 130,
-              className: 'num',
-              render: (m) => (
-                <>
-                  {m.open_task_count}
-                  {m.overdue_task_count > 0 && (
-                    <span className="text-danger small" title="Task quá hạn">
-                      {' '}
-                      ({m.overdue_task_count} quá hạn)
-                    </span>
-                  )}
-                </>
-              ),
-            },
-          ]}
-        />
-      )}
+      {view === 'gantt' ? <GanttView /> : <MemberTable onChanged={refreshLookup} />}
     </>
   );
 }
@@ -194,7 +343,7 @@ function MemberGantt({ member }) {
   );
 }
 
-function SetPasswordModal({ title, onClose, onSave }) {
+function SetPasswordModal({ title, onClose, onSave, hint }) {
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -213,16 +362,8 @@ function SetPasswordModal({ title, onClose, onSave }) {
       <form className="form" onSubmit={submit}>
         <div className="field">
           <label htmlFor="account-password">Mật khẩu (ít nhất 6 ký tự)</label>
-          <input
-            id="account-password"
-            type="text"
-            autoComplete="new-password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            autoFocus
-            required
-          />
-          <div className="hint">Gửi mật khẩu này cho thành viên; họ có thể tự đổi sau khi đăng nhập.</div>
+          <PasswordInput id="account-password" autoComplete="new-password" value={pw} onChange={setPw} autoFocus />
+          <div className="hint">{hint ?? 'Gửi mật khẩu này cho thành viên; họ có thể tự đổi sau khi đăng nhập.'}</div>
         </div>
         {error && <div className="error-box">{error}</div>}
         <div className="form-actions">
@@ -308,7 +449,7 @@ function AccountSection({ member, reload }) {
           {isAdmin && (
             <div className="account-actions">
               <button className="btn btn-sm" onClick={() => setModal('reset')}>
-                Đặt lại mật khẩu
+                Đổi mật khẩu
               </button>
               {!isSelf && (
                 <>
@@ -326,13 +467,12 @@ function AccountSection({ member, reload }) {
                   <button
                     className="btn btn-sm"
                     onClick={() =>
-                      save(
-                        { disabled: !acc.disabled },
-                        acc.disabled ? 'Đã mở khoá tài khoản' : 'Đã khoá tài khoản',
-                      ).catch(() => {})
+                      save({ disabled: !acc.disabled }, acc.disabled ? 'Đã bật tài khoản' : 'Đã tắt tài khoản').catch(
+                        () => {},
+                      )
                     }
                   >
-                    {acc.disabled ? 'Mở khoá' : 'Khoá tài khoản'}
+                    {acc.disabled ? 'Bật tài khoản (Active)' : 'Tắt tài khoản (Inactive)'}
                   </button>
                   <button className="btn btn-sm btn-danger-ghost" onClick={remove}>
                     Xoá tài khoản
@@ -345,10 +485,10 @@ function AccountSection({ member, reload }) {
       )}
       {modal && (
         <SetPasswordModal
-          title={modal === 'create' ? `Tạo tài khoản cho ${member.name}` : `Đặt lại mật khẩu cho ${member.name}`}
+          title={modal === 'create' ? `Tạo tài khoản cho ${member.name}` : `Đổi mật khẩu của ${member.name}`}
           onClose={() => setModal(null)}
           onSave={async (password) => {
-            await save({ password }, modal === 'create' ? 'Đã tạo tài khoản đăng nhập' : 'Đã đặt lại mật khẩu');
+            await save({ password }, modal === 'create' ? 'Đã tạo tài khoản đăng nhập' : 'Đã đổi mật khẩu');
             setModal(null);
           }}
         />

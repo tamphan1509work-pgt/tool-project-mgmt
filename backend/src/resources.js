@@ -517,6 +517,15 @@ export const members = {
     (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done'
        AND t.due_date < date('now', 'localtime')) AS overdue_task_count`,
   searchable: ['name', 'email', 'phone', 'position'],
+  // ?status=active|inactive (đăng nhập được hay không), ?role=admin|member
+  extraFilters(query, where) {
+    const active = 'EXISTS (SELECT 1 FROM accounts a WHERE a.member_id = members.id AND a.disabled = 0)';
+    const admin = 'EXISTS (SELECT 1 FROM accounts a WHERE a.member_id = members.id AND a.is_admin = 1)';
+    if (query.status === 'active') where.push(active);
+    if (query.status === 'inactive') where.push(`NOT ${active}`);
+    if (query.role === 'admin') where.push(admin);
+    if (query.role === 'member') where.push(`NOT ${admin}`);
+  },
   filterable: [],
   sortable: {
     name: 'name',

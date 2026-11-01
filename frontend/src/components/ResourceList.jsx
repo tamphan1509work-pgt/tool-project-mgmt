@@ -99,6 +99,8 @@ export default function ResourceList({
   nameOf = (row) => row.title,
   onChanged,
   onFiles, // (record, File[]) => Promise: tải file chọn trong form lên sau khi lưu
+  rowActions, // (row) => JSX: nút thêm trên từng dòng
+  reloadKey, // đổi giá trị để tải lại danh sách
 }) {
   const [params, setParam, setParams] = useParamSetter();
   const navigate = useNavigate();
@@ -117,7 +119,7 @@ export default function ResourceList({
 
   const { data, loading, error, reload } = useAsync(
     () => api.list(resource, { ...query, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
-    [resource, key, scoped && projectId],
+    [resource, key, scoped && projectId, reloadKey],
   );
 
   const sort = params.get('sort');
@@ -234,7 +236,7 @@ export default function ResourceList({
                       {c.sort && sort === c.sort && <span className="sort-ind">{order === 'asc' ? '▲' : '▼'}</span>}
                     </th>
                   ))}
-                  <th style={{ width: 116 }} />
+                  <th style={{ width: rowActions ? 148 : 116 }} />
                 </tr>
               </thead>
               <tbody>
@@ -252,6 +254,7 @@ export default function ResourceList({
                       </td>
                     ))}
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                      {rowActions?.(row)}
                       <CopyLinkButton compact resource={resource} id={row.id} label={codeOf(row)} />
                       <button className="icon-btn" title="Sửa" onClick={() => startEdit(row)}>
                         <Icon name="edit" size={16} />

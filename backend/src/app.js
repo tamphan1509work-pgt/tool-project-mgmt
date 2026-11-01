@@ -145,7 +145,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
       recordFailure(email);
       throw new HttpError(401, 'Email hoặc mật khẩu không đúng');
     }
-    if (acc.disabled) throw new HttpError(403, 'Tài khoản đã bị khoá. Liên hệ quản trị viên.');
+    if (acc.disabled) throw new HttpError(403, 'Tài khoản đang ở trạng thái Inactive (đã bị tắt). Liên hệ quản trị viên.');
     clearFailures(email);
     const session = await createSession(db, acc.member_id, { remember: req.body?.remember === true });
     res.json({ ...session, user: publicUser(await userFromToken(db, session.token)) });
@@ -225,9 +225,9 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
       }
       if (body.password !== undefined || disabled) db.prepare('DELETE FROM sessions WHERE member_id = ?').run(memberId);
       if (!acc) changes.push('Tạo tài khoản đăng nhập');
-      if (body.password !== undefined && acc) changes.push('Đặt lại mật khẩu');
+      if (body.password !== undefined && acc) changes.push('Đổi mật khẩu (bởi quản trị viên)');
       if (acc && isAdmin !== acc.is_admin) changes.push(isAdmin ? 'Cấp quyền quản trị' : 'Gỡ quyền quản trị');
-      if (acc && disabled !== acc.disabled) changes.push(disabled ? 'Khoá tài khoản' : 'Mở khoá tài khoản');
+      if (acc && disabled !== acc.disabled) changes.push(disabled ? 'Tắt tài khoản (Inactive)' : 'Bật tài khoản (Active)');
       if (changes.length) {
         recordHistory(db, { entity: 'members', entityId: memberId, action: 'account', summary: changes.join(', '), actor: req.user.name });
       }

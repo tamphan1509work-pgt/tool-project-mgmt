@@ -841,6 +841,23 @@ describe('auth', () => {
     await req('PUT', `/members/${huy.id}/account`, { is_admin: false });
     assert.equal((await req('DELETE', `/members/${an.id}`)).status, 400);
     r = await req('GET', `/history?entity=members&entity_id=${huy.id}`);
-    assert.ok(r.body.items.some((h) => /Khoá tài khoản/.test(h.summary ?? '')));
+    assert.ok(r.body.items.some((h) => /Tắt tài khoản \(Inactive\)/.test(h.summary ?? '')));
+  });
+});
+
+describe('members status filter', () => {
+  test('lọc thành viên theo trạng thái Active/Inactive và vai trò', async () => {
+    const m = (await req('POST', '/members', { name: 'Chưa có TK', email: 'chuaco@x.vn' })).body;
+    let r = await req('GET', '/members?status=inactive&limit=200');
+    assert.ok(r.body.items.some((x) => x.id === m.id), 'chưa có tài khoản = inactive');
+    await req('PUT', `/members/${m.id}/account`, { password: 'abc12345' });
+    r = await req('GET', '/members?status=active&limit=200');
+    assert.ok(r.body.items.some((x) => x.id === m.id));
+    await req('PUT', `/members/${m.id}/account`, { disabled: true });
+    r = await req('GET', '/members?status=inactive&limit=200');
+    assert.ok(r.body.items.some((x) => x.id === m.id), 'bị tắt = inactive');
+    r = await req('GET', '/members?role=admin&limit=200');
+    assert.ok(r.body.items.every((x) => x.is_admin === 1));
+    assert.ok(!(await req('GET', '/members?role=member&limit=200')).body.items.some((x) => x.is_admin === 1));
   });
 });

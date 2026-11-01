@@ -751,3 +751,36 @@ input:focus, select:focus, textarea:focus {
 .account-box { display: flex; flex-direction: column; gap: 10px; }
 .account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .settings-fieldset { border: none; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+/* ---------- Ô mật khẩu có icon con mắt ---------- */
+.password-input { position: relative; display: block; }
+.password-input input { width: 100%; padding-right: 40px; }
+.password-eye {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 32px; height: 32px;
+  display: grid; place-items: center; border: none; background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer;
+}
+.password-eye:hover { color: var(--text); background: var(--surface-2); }
+.password-eye:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* ---------- Công tắc Active / Inactive ---------- */
+.status-cell { display: inline-flex; align-items: center; gap: 8px; }
+.switch-btn {
+  position: relative; flex: 0 0 auto; width: 36px; height: 20px; border-radius: 999px; border: none; padding: 0;
+  background: var(--s-gray); cursor: pointer; transition: background 0.15s;
+}
+.switch-btn .switch-knob {
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface);
+  transition: transform 0.15s;
+}
+.switch-btn.on { background: var(--s-green); }
+.switch-btn.on .switch-knob { transform: translateX(16px); }
+.switch-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.switch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.nowrap { white-space: nowrap; }
+.table td.mono { white-space: nowrap; }
+.status-text { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.status-text.is-active { color: var(--t-green-fg); }
+/* Cột thao tác luôn hiện bên phải khi bảng phải cuộn ngang */
+.table-wrap > .table td.row-actions { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.12); }
+.table-wrap > .table thead th:last-child { position: sticky; right: 0; z-index: 1; }
+.table-wrap > .table tr.clickable:hover td.row-actions { background: var(--surface-2); }

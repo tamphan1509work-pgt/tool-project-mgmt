@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import Attachments from '../components/Attachments.jsx';
+import Attachments, { useUploader } from '../components/Attachments.jsx';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import ResourceList from '../components/ResourceList.jsx';
 import { Badge, Icon, Prose } from '../components/ui.jsx';
@@ -10,9 +10,11 @@ import { useLookup, useToast } from '../context.jsx';
 import { meetingFields } from '../forms.js';
 
 export function MeetingList() {
+  const upload = useUploader();
   const today = todayStr();
   return (
     <ResourceList
+      onFiles={(meeting, files) => upload('meetings', meeting.id, files)}
       resource="meetings"
       noun="biên bản họp"
       formFields={meetingFields}
@@ -162,8 +164,10 @@ function ActionItems({ meeting, reload }) {
 }
 
 export function MeetingDetail() {
+  const upload = useUploader();
   return (
     <DetailPage
+      onFiles={(meeting, files) => upload('meetings', meeting.id, files)}
       resource="meetings"
       backLabel="Danh sách biên bản họp"
       formFields={meetingFields}

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
-import EntityForm from './EntityForm.jsx';
+import EntityForm, { splitFiles } from './EntityForm.jsx';
 import { Empty, ErrorBox, Icon, Loading, Modal, Pagination } from './ui.jsx';
 
 const PAGE_SIZE = 20;
@@ -97,6 +97,7 @@ export default function ResourceList({
   codeOf = (row) => code(resource, row.id),
   nameOf = (row) => row.title,
   onChanged,
+  onFiles, // (record, File[]) => Promise: tải file chọn trong form lên sau khi lưu
 }) {
   const [params, setParam, setParams] = useParamSetter();
   const navigate = useNavigate();
@@ -151,13 +152,16 @@ export default function ResourceList({
   };
 
   const save = async (values) => {
+    const [payload, files] = splitFiles(formFields, values);
+    let record;
     if (editing === 'new') {
-      const created = await api.create(resource, scoped ? { ...values, project_id: projectId } : values);
-      toast(`Đã tạo ${codeOf(created)}`);
+      record = await api.create(resource, scoped ? { ...payload, project_id: projectId } : payload);
+      toast(`Đã tạo ${codeOf(record)}`);
     } else {
-      const updated = await api.update(resource, editing.id, values);
-      toast(`Đã cập nhật ${codeOf(updated)}`);
+      record = await api.update(resource, editing.id, payload);
+      toast(`Đã cập nhật ${codeOf(record)}`);
     }
+    if (files.length && onFiles) await onFiles(record, files);
     setEditing(null);
     changed();
   };

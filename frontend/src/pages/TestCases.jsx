@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { AddFilesButton, FileChips, FilePicker, uploadFiles, useUploadLimit } from '../components/Attachments.jsx';
 import DetailPage, { InfoList, LinkedList, Section } from '../components/DetailPage.jsx';
 import EntityForm from '../components/EntityForm.jsx';
 import ResourceList from '../components/ResourceList.jsx';
@@ -171,6 +172,8 @@ function RunPanel({ tc, reload, onFailed }) {
     }
   });
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState([]);
+  const maxBytes = useUploadLimit();
 
   const run = async (result) => {
     setBusy(true);
@@ -181,11 +184,19 @@ function RunPanel({ tc, reload, onFailed }) {
         // bỏ qua nếu trình duyệt chặn lưu trữ
       }
       const r = await api.addRun(tc.id, { result, note, executed_by: by });
-      toast(`Đã ghi nhận: ${label('testStatus', result)}`, result === 'passed' ? 'success' : 'warn');
+      // Tải file bằng chứng (ảnh chụp màn hình, log…) gắn vào lần chạy vừa tạo
+      const ok = files.filter((f) => f.size <= maxBytes);
+      const { uploaded, errors } = await uploadFiles('test-runs', r.id, ok);
+      for (const e of errors) toast(e, 'error');
+      toast(
+        `Đã ghi nhận: ${label('testStatus', result)}${uploaded ? ` · ${uploaded} file đính kèm` : ''}`,
+        result === 'passed' ? 'success' : 'warn',
+      );
       setNote('');
+      setFiles([]);
       reload();
       refreshLookup();
-      if (result === 'failed') onFailed(r);
+      if (result === 'failed') onFailed({ ...r, attachmentNames: ok.map((f) => f.name) });
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -202,6 +213,7 @@ function RunPanel({ tc, reload, onFailed }) {
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
+        <FilePicker compact value={files} onChange={setFiles} />
         <div className="run-actions">
           <input placeholder="Người thực hiện" list="run-people" value={by} onChange={(e) => setBy(e.target.value)} />
           <datalist id="run-people">
@@ -242,14 +254,15 @@ function RunHistory({ tc, reload }) {
         <div className="muted">Chưa chạy lần nào</div>
       ) : (
         <div className="table-wrap">
-          <table className="table compact">
+          <table className="table compact run-table">
             <thead>
               <tr>
                 <th className="col-stt">STT</th>
-                <th style={{ width: 140 }}>Thời điểm</th>
-                <th style={{ width: 110 }}>Kết quả</th>
-                <th style={{ width: 150 }}>Người chạy</th>
+                <th style={{ width: 120 }}>Thời điểm</th>
+                <th style={{ width: 100 }}>Kết quả</th>
+                <th style={{ width: 120 }}>Người chạy</th>
                 <th>Ghi chú</th>
+                <th style={{ width: 210 }}>File đính kèm</th>
                 <th style={{ width: 40 }} />
               </tr>
             </thead>
@@ -263,6 +276,10 @@ function RunHistory({ tc, reload }) {
                   </td>
                   <td>{r.executed_by}</td>
                   <td className="prose">{r.note}</td>
+                  <td>
+                    <FileChips files={r.attachments} onChanged={reload} />
+                    <AddFilesButton target="test-runs" id={r.id} onDone={reload} label="Thêm" />
+                  </td>
                   <td>
                     <button className="icon-btn danger" title="Xoá" onClick={() => remove(r)}>
                       ×
@@ -295,7 +312,14 @@ export function TestCaseDetail() {
     task_id: tc.task_id,
     steps_to_reproduce: [tc.preconditions && `Điều kiện: ${tc.preconditions}`, tc.steps].filter(Boolean).join('\n'),
     expected_result: tc.expected_result,
-    actual_result: run?.note ?? '',
+    actual_result: [
+      run?.note,
+      (run?.attachmentNames ?? run?.attachments?.map((a) => a.name) ?? []).length
+        ? `Bằng chứng đính kèm ở lần chạy test: ${(run.attachmentNames ?? run.attachments.map((a) => a.name)).join(', ')}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   });
 
   const createBug = async (values) => {

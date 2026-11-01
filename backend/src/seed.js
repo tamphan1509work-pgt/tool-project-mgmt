@@ -15,7 +15,7 @@ const day = (offset) => {
 const TABLES = [
   'task_documents',
   'task_links',
-  'meeting_attachments',
+  'attachments',
   'test_runs',
   'bugs',
   'test_cases',
@@ -177,7 +177,7 @@ export function seed(db, { reset = false } = {}) {
     const enc = (text) => new TextEncoder().encode(text);
     const attach = (meeting_id, name, mime_type, text) => {
       const data = enc(text);
-      insert('meeting_attachments', { meeting_id, name, mime_type, size: data.length, data });
+      insert('attachments', { meeting_id, name, mime_type, size: data.length, data });
     };
     attach(
       m1,
@@ -433,12 +433,24 @@ export function seed(db, { reset = false } = {}) {
     let minute = 0;
     const run = (id, result, offset, note, by = 'Phạm Thu Dung') => {
       const at = `${day(offset)} 10:${String(10 + minute++).padStart(2, '0')}:00`;
-      insert('test_runs', { test_case_id: id, result, note, executed_by: by, executed_at: at });
+      const runId = insert('test_runs', { test_case_id: id, result, note, executed_by: by, executed_at: at });
       db.prepare('UPDATE test_cases SET status = ?, last_run_at = ? WHERE id = ?').run(result, at, id);
+      return runId;
     };
     run(tc1, 'failed', -4, 'Callback không cập nhật trạng thái đơn hàng');
     run(tc1, 'passed', -1, 'Đã fix, chạy lại OK');
-    run(tc2, 'failed', -2, 'Lần thứ 3 vẫn cho nhập tiếp');
+    const failedOtp = run(tc2, 'failed', -2, 'Lần thứ 3 vẫn cho nhập tiếp');
+    const log = new TextEncoder().encode(
+      '[10:12:01] POST /otp/verify attempt=1 -> 401\n[10:12:09] POST /otp/verify attempt=2 -> 401\n' +
+        '[10:12:15] POST /otp/verify attempt=3 -> 401\n[10:12:20] POST /otp/verify attempt=4 -> 401  <-- lẽ ra phải bị khoá\n',
+    );
+    insert('attachments', {
+      test_run_id: failedOtp,
+      name: 'otp-verify.log',
+      mime_type: 'text/plain',
+      size: log.length,
+      data: log,
+    });
     run(tc3, 'blocked', -2, 'Chưa có môi trường staging để chỉnh thời gian OTP');
     run(tc4, 'passed', -1, 'p95 = 320ms');
 

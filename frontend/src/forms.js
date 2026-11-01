@@ -16,6 +16,12 @@ export const meetingFields = [
   { name: 'agenda', label: 'Nội dung / Agenda', type: 'textarea', rows: 4 },
   { name: 'notes', label: 'Biên bản (nội dung thảo luận)', type: 'textarea', rows: 8 },
   { name: 'decisions', label: 'Quyết định / Kết luận', type: 'textarea', rows: 4 },
+  {
+    name: 'files',
+    label: 'Tệp đính kèm',
+    type: 'files',
+    hint: 'File được tải lên sau khi lưu biên bản. File đã đính kèm xem ở trang chi tiết.',
+  },
 ];
 
 export const taskFields = [

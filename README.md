@@ -6,9 +6,9 @@
 |---|---|
 | **Dự án & thành viên** | Danh sách dự án (mã, tên, trạng thái, thời gian), số task/bug đang mở. Trong từng dự án: thêm thành viên (chọn người có sẵn hoặc tạo mới), gán **vai trò trong dự án** (PM, BA, Tech lead, Developer, Tester, Designer, DevOps, Stakeholder), đổi vai trò, gỡ thành viên. Một người có thể tham gia nhiều dự án với vai trò khác nhau |
 | **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
-| **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
+| **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** ngay khi tạo / sửa biên bản hoặc tại trang chi tiết (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
 | **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp. **Tài liệu liên quan** chọn từ mục Tài liệu (thêm / gỡ ngay trên trang task). **Subtask** (1 cấp) với thanh tiến độ, đánh dấu xong nhanh. **Task liên quan / phụ thuộc**: *phụ thuộc vào*, *đang chặn*, *liên quan*, cảnh báo khi task đang chờ task khác, chặn phụ thuộc vòng tròn |
-| **Test report** | Báo cáo kiểm thử của dự án: tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module; danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) với lịch sử chạy |
+| **Test report** | Báo cáo kiểm thử của dự án: tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module; danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
 | **Bug** | Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
 | **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
 
@@ -99,6 +99,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | GET | `/test-cases/:id/runs` | Lịch sử chạy |
 | DELETE | `/test-runs/:id` | Xoá một lần chạy (trạng thái test case được tính lại) |
 | POST | `/meetings/:id/attachments` | Đính kèm file `{ name, mime_type, data }` (`data` là base64) |
+| POST | `/test-runs/:id/attachments` | Đính kèm file vào một lần chạy test (cùng định dạng) |
 | GET | `/attachments/:id/download` | Tải file (`?inline=1` để xem ảnh trực tiếp) |
 | DELETE | `/attachments/:id` | Xoá file |
 | POST | `/tasks/:id/links` | Liên kết task `{ other_task_id, type: depends_on \| blocks \| relates }` |

@@ -138,17 +138,20 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- File đính kèm biên bản họp (nội dung lưu trong DB)
-CREATE TABLE IF NOT EXISTS meeting_attachments (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  meeting_id  INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  mime_type   TEXT NOT NULL DEFAULT 'application/octet-stream',
-  size        INTEGER NOT NULL,
-  data        BLOB NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+-- File đính kèm (nội dung lưu trong DB): thuộc một biên bản họp HOẶC một lần chạy test
+CREATE TABLE IF NOT EXISTS attachments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id   INTEGER REFERENCES meetings(id) ON DELETE CASCADE,
+  test_run_id  INTEGER REFERENCES test_runs(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  mime_type    TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size         INTEGER NOT NULL,
+  data         BLOB NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK ((meeting_id IS NULL) <> (test_run_id IS NULL))
 );
-CREATE INDEX IF NOT EXISTS idx_meeting_attachments_meeting ON meeting_attachments(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_meeting ON attachments(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_test_run ON attachments(test_run_id);
 
 -- Liên kết giữa các task: depends_on (task_id phụ thuộc other_task_id) hoặc relates (liên quan)
 CREATE TABLE IF NOT EXISTS task_links (
@@ -184,6 +187,15 @@ function migrate(db) {
     db.exec('ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE');
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
+
+  // Phiên bản trước lưu file biên bản họp ở bảng riêng -> chuyển sang bảng attachments dùng chung
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meeting_attachments'").get()) {
+    db.exec(`
+      INSERT INTO attachments (meeting_id, name, mime_type, size, data, created_at)
+        SELECT meeting_id, name, mime_type, size, data, created_at FROM meeting_attachments ORDER BY id;
+      DROP TABLE meeting_attachments;
+    `);
+  }
 
   for (const table of SCOPED_TABLES) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);

@@ -63,7 +63,8 @@ export const api = {
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
   dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
   config: () => request('GET', '/config'),
-  addAttachment: (meetingId, data) => request('POST', `/meetings/${meetingId}/attachments`, data),
+  // target: 'meetings' | 'test-runs'
+  uploadAttachment: (target, id, data) => request('POST', `/${target}/${id}/attachments`, data),
   removeAttachment: (id) => request('DELETE', `/attachments/${id}`),
   attachmentBlob: (id, inline = false) => requestBlob(`/attachments/${id}/download${inline ? '?inline=1' : ''}`),
   addTaskLink: (taskId, data) => request('POST', `/tasks/${taskId}/links`, data),

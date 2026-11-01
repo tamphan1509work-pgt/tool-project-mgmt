@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code, fmtDateTime } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
-import EntityForm from './EntityForm.jsx';
+import EntityForm, { splitFiles } from './EntityForm.jsx';
 import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
 
 /**
@@ -21,6 +21,7 @@ export default function DetailPage({
   codeOf = (row) => code(resource, row.id),
   nameOf = (row) => row.title,
   onChanged,
+  onFiles,
 }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -56,8 +57,10 @@ export default function DetailPage({
   };
 
   const save = async (values) => {
-    const updated = await api.update(resource, id, values);
+    const [payload, files] = splitFiles(formFields, values);
+    const updated = await api.update(resource, id, payload);
     toast(`Đã cập nhật ${codeOf(updated)}`);
+    if (files.length && onFiles) await onFiles(updated, files);
     setEditing(false);
     reload();
     refreshLookup();

@@ -572,3 +572,22 @@ input:focus, select:focus, textarea:focus {
 .picker-list label:hover { background: var(--surface-2); }
 .picker-title { flex: 1 1 200px; min-width: 0; }
 .picker .form-actions { align-items: center; }
+
+/* ---------- Chọn file trong form & file của lần chạy test ---------- */
+.file-picker { display: flex; flex-direction: column; gap: 6px; }
+.file-picker .dropzone { margin-top: 0; }
+.dropzone-compact { justify-content: flex-start; padding: 8px 12px; border-width: 1px; text-align: left; }
+.pending-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pending-files li {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: var(--surface-2);
+  font-size: 13px;
+}
+.pending-files li.is-invalid { background: var(--t-red-bg); }
+.pending-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chips { list-style: none; margin: 0 0 2px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.file-chips li { display: flex; align-items: center; gap: 2px; font-size: 13px; min-width: 0; }
+.file-chips .link-btn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+.file-chips .icon-btn { width: 24px; height: 24px; flex: 0 0 auto; }
+
+.run-table td.prose { min-width: 180px; }
+.run-table td .file-chips { max-width: 210px; }

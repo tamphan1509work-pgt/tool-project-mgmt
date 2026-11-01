@@ -66,13 +66,9 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
   api.get('/enums', (_req, res) => res.json(ENUMS));
   api.get('/config', (_req, res) => res.json({ maxUploadBytes }));
 
-  // ---- File đính kèm biên bản họp ----
-  api.post('/meetings/:id/attachments', (req, res) => {
-    const meetingId = parseId(req.params.id);
-    if (!db.prepare('SELECT 1 FROM meetings WHERE id = ?').get(meetingId)) {
-      throw new HttpError(404, `Không tìm thấy cuộc họp #${meetingId}`);
-    }
-    const body = req.body ?? {};
+  // ---- File đính kèm: biên bản họp và lần chạy test ----
+  const ATTACH_COLS = 'id, meeting_id, test_run_id, name, mime_type, size, created_at';
+  const addAttachment = (ownerCol, ownerId, body = {}) => {
     const name = typeof body.name === 'string' ? body.name.replace(/[\\/\u0000-\u001f]/g, '_').trim() : '';
     if (!name || name.length > 255) throw new HttpError(400, 'Dữ liệu không hợp lệ', { name: 'Tên file không hợp lệ' });
     const mime =
@@ -85,20 +81,30 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
       throw new HttpError(400, 'Dữ liệu không hợp lệ', { data: `File vượt quá ${fmtMB(maxUploadBytes)}` });
     }
     const info = db
-      .prepare('INSERT INTO meeting_attachments (meeting_id, name, mime_type, size, data) VALUES (?, ?, ?, ?, ?)')
-      .run(meetingId, name, mime, data.length, data);
-    res
-      .status(201)
-      .json(
-        db
-          .prepare('SELECT id, meeting_id, name, mime_type, size, created_at FROM meeting_attachments WHERE id = ?')
-          .get(Number(info.lastInsertRowid)),
-      );
+      .prepare(`INSERT INTO attachments (${ownerCol}, name, mime_type, size, data) VALUES (?, ?, ?, ?, ?)`)
+      .run(ownerId, name, mime, data.length, data);
+    return db.prepare(`SELECT ${ATTACH_COLS} FROM attachments WHERE id = ?`).get(Number(info.lastInsertRowid));
+  };
+
+  api.post('/meetings/:id/attachments', (req, res) => {
+    const meetingId = parseId(req.params.id);
+    if (!db.prepare('SELECT 1 FROM meetings WHERE id = ?').get(meetingId)) {
+      throw new HttpError(404, `Không tìm thấy cuộc họp #${meetingId}`);
+    }
+    res.status(201).json(addAttachment('meeting_id', meetingId, req.body));
+  });
+
+  api.post('/test-runs/:id/attachments', (req, res) => {
+    const runId = parseId(req.params.id);
+    if (!db.prepare('SELECT 1 FROM test_runs WHERE id = ?').get(runId)) {
+      throw new HttpError(404, `Không tìm thấy lần chạy test #${runId}`);
+    }
+    res.status(201).json(addAttachment('test_run_id', runId, req.body));
   });
 
   api.get('/attachments/:id/download', (req, res) => {
     const id = parseId(req.params.id);
-    const file = db.prepare('SELECT * FROM meeting_attachments WHERE id = ?').get(id);
+    const file = db.prepare('SELECT * FROM attachments WHERE id = ?').get(id);
     if (!file) throw new HttpError(404, `Không tìm thấy file #${id}`);
     // Chỉ cho xem trực tiếp ảnh (không gồm SVG) để tránh chạy nội dung do người dùng tải lên
     const inline = req.query.inline === '1' && /^image\/(png|jpe?g|gif|webp|bmp)$/.test(file.mime_type);
@@ -115,7 +121,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
   });
 
   api.delete('/attachments/:id', (req, res) => {
-    const info = db.prepare('DELETE FROM meeting_attachments WHERE id = ?').run(parseId(req.params.id));
+    const info = db.prepare('DELETE FROM attachments WHERE id = ?').run(parseId(req.params.id));
     if (!info.changes) throw new HttpError(404, 'Không tìm thấy file');
     res.status(204).end();
   });

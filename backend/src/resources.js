@@ -57,12 +57,12 @@ export const meetings = {
       params.push(query.to);
     }
   },
-  selectExtra: '(SELECT COUNT(*) FROM meeting_attachments a WHERE a.meeting_id = meetings.id) AS attachment_count',
+  selectExtra: '(SELECT COUNT(*) FROM attachments a WHERE a.meeting_id = meetings.id) AS attachment_count',
   expand(db, row) {
     return {
       attachments: db
         .prepare(
-          'SELECT id, name, mime_type, size, created_at FROM meeting_attachments WHERE meeting_id = ? ORDER BY id',
+          'SELECT id, name, mime_type, size, created_at FROM attachments WHERE meeting_id = ? ORDER BY id',
         )
         .all(row.id),
       action_items: db
@@ -224,15 +224,27 @@ export const testCases = {
   expand(db, row) {
     return {
       task: row.task_id ? db.prepare('SELECT id, title, status FROM tasks WHERE id = ?').get(row.task_id) ?? null : null,
-      runs: db
-        .prepare('SELECT * FROM test_runs WHERE test_case_id = ? ORDER BY executed_at DESC, id DESC LIMIT 100')
-        .all(row.id),
+      runs: runsWithAttachments(db, row.id),
       bugs: db
         .prepare('SELECT id, title, status, severity FROM bugs WHERE test_case_id = ? ORDER BY id DESC')
         .all(row.id),
     };
   },
 };
+
+/** Lịch sử chạy test kèm file đính kèm (bằng chứng: ảnh chụp, log…) của từng lần chạy */
+export function runsWithAttachments(db, testCaseId) {
+  const runs = db
+    .prepare('SELECT * FROM test_runs WHERE test_case_id = ? ORDER BY executed_at DESC, id DESC LIMIT 100')
+    .all(testCaseId);
+  const files = db
+    .prepare(
+      `SELECT a.id, a.test_run_id, a.name, a.mime_type, a.size, a.created_at FROM attachments a
+       JOIN test_runs r ON r.id = a.test_run_id WHERE r.test_case_id = ? ORDER BY a.id`,
+    )
+    .all(testCaseId);
+  return runs.map((r) => ({ ...r, attachments: files.filter((f) => f.test_run_id === r.id) }));
+}
 
 export const testRuns = {
   result: { type: 'enum', values: ENUMS.testResult, required: true },

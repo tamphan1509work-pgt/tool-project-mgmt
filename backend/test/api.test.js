@@ -417,7 +417,7 @@ describe('meeting attachments', () => {
     await req('DELETE', `/attachments/${fileId}`);
     assert.equal((await fetch(`${base}/attachments/${fileId}/download`)).status, 404);
     await req('DELETE', `/meetings/${m.id}`);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM meeting_attachments WHERE meeting_id = ?').get(m.id).n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE meeting_id = ?').get(m.id).n, 0);
   });
 
   test('giới hạn dung lượng file', async () => {
@@ -511,5 +511,62 @@ describe('subtasks & task links', () => {
     assert.equal((await req('DELETE', `/task-links/${linkId}`)).status, 204);
     await req('DELETE', `/tasks/${c}`);
     assert.equal((await req('GET', `/tasks/${a}`)).body.links.depends_on.length, 1);
+  });
+});
+
+describe('test run attachments', () => {
+  test('đính kèm file vào lần chạy test; xoá lần chạy xoá file', async () => {
+    const tc = (await req('POST', '/test-cases', { project_id: P, title: 'Có bằng chứng' })).body;
+    const run = (await req('POST', `/test-cases/${tc.id}/runs`, { result: 'failed', note: 'Lỗi' })).body;
+    let r = await req('POST', `/test-runs/${run.id}/attachments`, {
+      name: 'screenshot.png',
+      mime_type: 'image/png',
+      data: 'iVBORw0KGgo=',
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.test_run_id, run.id);
+    assert.equal(r.body.meeting_id, null);
+    const fileId = r.body.id;
+    const inl = await fetch(`${base}/attachments/${fileId}/download?inline=1`);
+    assert.match(inl.headers.get('content-disposition'), /^inline/);
+
+    r = await req('GET', `/test-cases/${tc.id}`);
+    assert.equal(r.body.runs[0].attachments.length, 1);
+    assert.equal(r.body.runs[0].attachments[0].name, 'screenshot.png');
+    assert.equal((await req('POST', '/test-runs/99999/attachments', { name: 'a', data: 'YQ==' })).status, 404);
+
+    await req('DELETE', `/test-runs/${run.id}`);
+    assert.equal((await fetch(`${base}/attachments/${fileId}/download`)).status, 404);
+  });
+
+  test('migration: file biên bản họp ở bảng cũ được chuyển sang bảng chung', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pm-att-'));
+    const file = join(dir, 'old.db');
+    try {
+      const first = openDb(file);
+      const p = first.prepare("INSERT INTO projects (code, name) VALUES ('OLD', 'Cũ')").run().lastInsertRowid;
+      const m = first
+        .prepare("INSERT INTO meetings (project_id, title, meeting_date) VALUES (?, 'Họp', '2026-01-01')")
+        .run(p).lastInsertRowid;
+      first.exec(`CREATE TABLE meeting_attachments (id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id INTEGER NOT NULL,
+        name TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+      first
+        .prepare("INSERT INTO meeting_attachments (meeting_id, name, mime_type, size, data) VALUES (?, 'a.txt', 'text/plain', 2, ?)")
+        .run(m, new Uint8Array([104, 105]));
+      first.close();
+
+      const again = openDb(file);
+      const row = again.prepare('SELECT * FROM attachments WHERE meeting_id = ?').get(m);
+      assert.equal(row.name, 'a.txt');
+      assert.equal(Buffer.from(row.data).toString(), 'hi');
+      assert.equal(
+        again.prepare("SELECT 1 FROM sqlite_master WHERE name = 'meeting_attachments'").get(),
+        undefined,
+      );
+      again.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

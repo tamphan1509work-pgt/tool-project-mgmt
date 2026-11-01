@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { useLookup } from '../context.jsx';
 import { code, label } from '../constants.js';
+import { FilePicker } from './Attachments.jsx';
 
 const REF_RESOURCE = { meetings: 'meetings', tasks: 'tasks', testCases: 'test-cases', documents: 'documents' };
 
@@ -59,6 +60,8 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
       return <textarea rows={field.rows ?? 4} {...common} />;
     case 'url':
       return <input type="url" inputMode="url" {...common} />;
+    case 'files':
+      return <FilePicker id={id} value={value ?? []} onChange={onChange} />;
     case 'multiref':
       return <MultiRef field={field} value={value} onChange={onChange} lookup={lookup} id={id} />;
     case 'date':
@@ -124,7 +127,8 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
   const baseId = useId();
   const [values, setValues] = useState(() => {
     const v = {};
-    for (const f of fields) v[f.name] = initial[f.name] ?? f.default ?? (f.type === 'multiref' ? [] : '');
+    for (const f of fields)
+      v[f.name] = initial[f.name] ?? f.default ?? (f.type === 'multiref' || f.type === 'files' ? [] : '');
     return v;
   });
   const [errors, setErrors] = useState({});
@@ -139,7 +143,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
     const data = {};
     for (const f of fields) {
       const v = values[f.name];
-      if (f.type === 'multiref') {
+      if (f.type === 'multiref' || f.type === 'files') {
         data[f.name] = v ?? [];
         continue;
       }
@@ -162,7 +166,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
           return (
             <div
               key={f.name}
-              className={`field ${f.full || f.type === 'textarea' || f.type === 'multiref' ? 'field-full' : ''}`}
+              className={`field ${f.full || f.type === 'textarea' || f.type === 'multiref' || f.type === 'files' ? 'field-full' : ''}`}
             >
               <label htmlFor={id}>
                 {f.label}
@@ -198,4 +202,16 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
       </div>
     </form>
   );
+}
+
+/** Tách các field kiểu 'files' (File[] chờ tải lên) ra khỏi dữ liệu gửi API */
+export function splitFiles(fields, values) {
+  const payload = { ...values };
+  const files = [];
+  for (const f of fields) {
+    if (f.type !== 'files') continue;
+    files.push(...(payload[f.name] ?? []));
+    delete payload[f.name];
+  }
+  return [payload, files];
 }

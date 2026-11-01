@@ -2,7 +2,9 @@ import { HttpError, today } from './resource.js';
 
 export const ENUMS = {
   priority: ['low', 'medium', 'high', 'critical'],
-  taskStatus: ['todo', 'in_progress', 'review', 'done'],
+  taskStatus: ['todo', 'in_progress', 'done_dev', 'testing', 'ready_release', 'released', 'canceled'],
+  // Task đã đóng: không còn tính trễ hạn, được tính là xong trong tiến độ
+  taskClosed: ['released', 'canceled'],
   testType: ['functional', 'integration', 'regression', 'smoke', 'performance', 'security', 'ui'],
   testStatus: ['not_run', 'passed', 'failed', 'blocked'],
   testResult: ['passed', 'failed', 'blocked'],
@@ -46,6 +48,7 @@ export const meetings = {
     notes: { type: 'text', max: 100000 },
     decisions: { type: 'text' },
   },
+  trackCreator: true,
   searchable: ['title', 'attendees', 'agenda', 'notes', 'decisions', 'location'],
   filterable: ['project_id'],
   sortable: { meeting_date: "meeting_date || ' ' || COALESCE(start_time, '')", title: 'title', ...timestamps },
@@ -83,10 +86,11 @@ export const tasks = {
     project_id: projectRef,
     title: { type: 'string', required: true },
     category_id: { type: 'ref', table: 'categories', sameProject: true },
-    description: { type: 'text' },
+    description: { type: 'html', max: 6_000_000 }, // HTML từ trình soạn thảo (có thể chứa ảnh)
     status: { type: 'enum', values: ENUMS.taskStatus, default: 'todo' },
     priority: { type: 'enum', values: ENUMS.priority, default: 'medium' },
-    assignee: { type: 'string' },
+    assignee: { type: 'string' }, // PIC
+    requester: { type: 'string' },
     start_date: { type: 'date' },
     due_date: { type: 'date' },
     estimate_hours: { type: 'number' },
@@ -105,23 +109,28 @@ export const tasks = {
   },
   selectExtra: `
     (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = tasks.id) AS subtask_count,
-    (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = tasks.id AND s.status = 'done') AS subtask_done_count,
+    (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = tasks.id AND s.status IN ('released', 'canceled')) AS subtask_done_count,
     (SELECT pt.title FROM tasks pt WHERE pt.id = tasks.parent_id) AS parent_title,
     (SELECT COUNT(*) FROM task_links l JOIN tasks o ON o.id = l.other_task_id
-       WHERE l.task_id = tasks.id AND l.type = 'depends_on' AND o.status <> 'done') AS blocked_by_count`,
-  searchable: ['title', 'description', 'assignee'],
-  filterable: ['project_id', 'status', 'priority', 'assignee', 'meeting_id', 'parent_id', 'milestone_id'],
+       WHERE l.task_id = tasks.id AND l.type = 'depends_on' AND o.status NOT IN ('released', 'canceled')) AS blocked_by_count`,
+  trackCreator: true,
+  countBy: 'status',
+  searchable: ['title', 'description', 'assignee', 'requester', 'created_by'],
+  filterable: ['project_id', 'status', 'priority', 'assignee', 'requester', 'meeting_id', 'parent_id', 'milestone_id'],
   sortable: {
     due_date: "COALESCE(due_date, '9999-12-31')",
     priority: rank('priority', ENUMS.priority),
     status: rank('status', ENUMS.taskStatus),
     title: 'title',
+    assignee: "COALESCE(assignee, '')",
+    requester: "COALESCE(requester, '')",
+    created_by: "COALESCE(created_by, '')",
     ...timestamps,
   },
   defaultSort: 'created_at',
   extraFilters(query, where, params) {
     if (query.overdue === 'true') {
-      where.push("due_date < ? AND status <> 'done'");
+      where.push("due_date < ? AND status NOT IN ('released', 'canceled')");
       params.push(today());
     }
   },
@@ -146,7 +155,7 @@ export const tasks = {
       }
     }
     if (data.status !== undefined && data.status !== existing?.status) {
-      data.completed_at = data.status === 'done' ? nowSql() : null;
+      data.completed_at = ENUMS.taskClosed.includes(data.status) ? nowSql() : null;
     }
   },
   expand(db, row) {
@@ -220,6 +229,7 @@ export const testCases = {
     expected_result: { type: 'text' },
     task_id: { type: 'ref', table: 'tasks', sameProject: true },
   },
+  trackCreator: true,
   searchable: ['title', 'module', 'steps', 'expected_result'],
   filterable: ['project_id', 'status', 'priority', 'type', 'module', 'task_id'],
   sortable: {
@@ -229,6 +239,7 @@ export const testCases = {
     title: 'title',
     last_run_at: "COALESCE(last_run_at, '')",
     id: 'id',
+    created_by: "COALESCE(created_by, '')",
     ...timestamps,
   },
   defaultSort: 'id',
@@ -285,6 +296,7 @@ export const bugs = {
     test_case_id: { type: 'ref', table: 'test_cases', sameProject: true },
     task_id: { type: 'ref', table: 'tasks', sameProject: true },
   },
+  trackCreator: true,
   searchable: ['title', 'description', 'steps_to_reproduce', 'actual_result', 'environment', 'assignee', 'reporter'],
   filterable: ['project_id', 'status', 'severity', 'priority', 'assignee', 'test_case_id', 'task_id'],
   sortable: {
@@ -292,6 +304,8 @@ export const bugs = {
     priority: rank('priority', ENUMS.priority),
     status: rank('status', ENUMS.bugStatus),
     title: 'title',
+    created_by: "COALESCE(created_by, '')",
+    reporter: "COALESCE(reporter, '')",
     ...timestamps,
   },
   defaultSort: 'created_at',
@@ -355,7 +369,7 @@ export const projects = {
   selectExtra: `
     (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = projects.id) AS member_count,
     (SELECT COUNT(*) FROM tasks t WHERE t.project_id = projects.id) AS task_count,
-    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = projects.id AND t.status <> 'done') AS open_task_count,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = projects.id AND t.status NOT IN ('released', 'canceled')) AS open_task_count,
     (SELECT COUNT(*) FROM bugs b WHERE b.project_id = projects.id AND b.status IN ('new','in_progress','reopened')) AS open_bug_count`,
   searchable: ['code', 'name', 'description'],
   filterable: ['status'],
@@ -376,7 +390,7 @@ export const projects = {
       stats: {
         meetings: one('SELECT COUNT(*) AS n FROM meetings WHERE project_id = ?'),
         tasks: one('SELECT COUNT(*) AS n FROM tasks WHERE project_id = ?'),
-        doneTasks: one("SELECT COUNT(*) AS n FROM tasks WHERE project_id = ? AND status = 'done'"),
+        doneTasks: one("SELECT COUNT(*) AS n FROM tasks WHERE project_id = ? AND status IN ('released', 'canceled')"),
         testCases: one('SELECT COUNT(*) AS n FROM test_cases WHERE project_id = ?'),
         passedTests: one("SELECT COUNT(*) AS n FROM test_cases WHERE project_id = ? AND status = 'passed'"),
         bugs: one('SELECT COUNT(*) AS n FROM bugs WHERE project_id = ?'),
@@ -451,8 +465,8 @@ export const milestones = {
   },
   selectExtra: `
     (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id) AS task_count,
-    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id AND t.status = 'done') AS done_count,
-    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id AND t.status <> 'done'
+    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id AND t.status IN ('released', 'canceled')) AS done_count,
+    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id AND t.status NOT IN ('released', 'canceled')
        AND t.due_date < date('now', 'localtime')) AS overdue_task_count`,
   searchable: ['name', 'description'],
   filterable: ['project_id', 'status'],
@@ -474,7 +488,7 @@ export const milestones = {
       tasks: db
         .prepare(
           `SELECT id, title, status, priority, assignee, due_date, parent_id FROM tasks
-           WHERE milestone_id = ? ORDER BY status = 'done', COALESCE(due_date, '9999-12-31'), id`,
+           WHERE milestone_id = ? ORDER BY status IN ('released', 'canceled'), COALESCE(due_date, '9999-12-31'), id`,
         )
         .all(row.id),
     };
@@ -513,8 +527,8 @@ export const members = {
     (SELECT a.is_admin FROM accounts a WHERE a.member_id = members.id) AS is_admin,
     (SELECT a.disabled FROM accounts a WHERE a.member_id = members.id) AS account_disabled,
     (SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count,
-    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done') AS open_task_count,
-    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done'
+    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status NOT IN ('released', 'canceled')) AS open_task_count,
+    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status NOT IN ('released', 'canceled')
        AND t.due_date < date('now', 'localtime')) AS overdue_task_count`,
   searchable: ['name', 'email', 'phone', 'position'],
   // ?status=active|inactive (đăng nhập được hay không), ?role=admin|member
@@ -550,7 +564,7 @@ export const members = {
           `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.project_id, p.code AS project_code
            FROM tasks t JOIN projects p ON p.id = t.project_id
            WHERE ${ASSIGNED('t.assignee', '?')}
-           ORDER BY t.status = 'done', COALESCE(t.due_date, '9999-12-31'), t.id`,
+           ORDER BY t.status IN ('released', 'canceled'), COALESCE(t.due_date, '9999-12-31'), t.id`,
         )
         .all(row.name),
     };
@@ -612,6 +626,7 @@ export const documents = {
   },
   selectExtra:
     '(SELECT COUNT(*) FROM task_documents td WHERE td.document_id = documents.id) AS task_count',
+  trackCreator: true,
   searchable: ['title', 'description', 'author', 'version'],
   filterable: ['project_id', 'type', 'status', 'author'],
   sortable: {

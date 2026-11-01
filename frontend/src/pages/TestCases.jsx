@@ -294,6 +294,15 @@ function TestCaseTable() {
           className: 'muted small',
           render: (t) => fmtDateTime(t.last_run_at),
         },
+        { key: 'created_by', title: 'Người tạo', sort: 'created_by', width: 140, className: 'nowrap' },
+        {
+          key: 'created_at',
+          title: 'Thời gian tạo',
+          sort: 'created_at',
+          width: 160,
+          className: 'small nowrap',
+          render: (t) => fmtDateTime(t.created_at),
+        },
       ]}
     />
   );
@@ -473,6 +482,7 @@ export function TestCaseDetail() {
     <DetailPage
       resource="test-cases"
       backLabel="Test report"
+      historyTab
       formFields={testCaseFields}
       badges={(tc) => (
         <>
@@ -508,6 +518,8 @@ export function TestCaseDetail() {
                   items={[
                     ['Danh mục', <CategoryBadge key="c" id={tc.category_id} full />],
                     ['Module', tc.module],
+                    ['Người tạo', tc.created_by],
+                    ['Thời gian tạo', fmtDateTime(tc.created_at)],
                     ['Loại', label('testType', tc.type)],
                     ['Chạy lần cuối', fmtDateTime(tc.last_run_at)],
                     [

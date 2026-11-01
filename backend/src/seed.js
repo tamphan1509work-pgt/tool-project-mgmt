@@ -242,7 +242,7 @@ export function seed(db, { reset = false } = {}) {
         project_id: pay,
         title: 'Thiết kế kiến trúc service thanh toán',
         description: 'Vẽ sơ đồ kiến trúc, định nghĩa API giữa các service.',
-        status: 'done',
+        status: 'released',
         priority: 'high',
         assignee: 'Lê Minh Châu',
         start_date: day(-13),
@@ -257,8 +257,14 @@ export function seed(db, { reset = false } = {}) {
       {
         project_id: pay,
         title: 'Xây dựng API thanh toán thẻ nội địa',
-        description: 'Tích hợp cổng NAPAS: khởi tạo giao dịch, callback, truy vấn trạng thái.',
-        status: 'review',
+        description:
+          '<p>Tích hợp cổng <strong>NAPAS</strong> cho thanh toán thẻ nội địa.</p>' +
+          '<ol><li>Khởi tạo giao dịch</li><li>Nhận callback và cập nhật đơn hàng</li><li>Truy vấn trạng thái giao dịch</li></ol>' +
+          '<table><tbody><tr><th><p>Endpoint</p></th><th><p>Mô tả</p></th></tr>' +
+          '<tr><td><p>POST /payments</p></td><td><p>Khởi tạo giao dịch</p></td></tr>' +
+          '<tr><td><p>POST /payments/callback</p></td><td><p>NAPAS gọi về khi có kết quả</p></td></tr>' +
+          '<tr><td><p>GET /payments/:id</p></td><td><p>Truy vấn trạng thái</p></td></tr></tbody></table>',
+        status: 'testing',
         priority: 'critical',
         assignee: 'Hoàng Gia Huy',
         start_date: day(-9),
@@ -362,8 +368,8 @@ export function seed(db, { reset = false } = {}) {
 
     // ---------- Subtask ----------
     for (const [title, status, assignee, offset] of [
-      ['Khởi tạo giao dịch NAPAS', 'done', 'Hoàng Gia Huy', -6],
-      ['Xử lý callback & cập nhật đơn hàng', 'done', 'Hoàng Gia Huy', -3],
+      ['Khởi tạo giao dịch NAPAS', 'released', 'Hoàng Gia Huy', -6],
+      ['Xử lý callback & cập nhật đơn hàng', 'done_dev', 'Hoàng Gia Huy', -3],
       ['API truy vấn trạng thái giao dịch', 'in_progress', 'Hoàng Gia Huy', 0],
       ['Viết unit test cho service thanh toán', 'todo', 'Hoàng Gia Huy', 1],
     ]) {
@@ -375,11 +381,11 @@ export function seed(db, { reset = false } = {}) {
         assignee,
         priority: 'high',
         due_date: day(offset),
-        completed_at: status === 'done' ? `${day(offset)} 17:00:00` : null,
+        completed_at: status === 'released' ? `${day(offset)} 17:00:00` : null,
       });
     }
     for (const [title, status] of [
-      ['Giao diện nhập OTP 6 số', 'done'],
+      ['Giao diện nhập OTP 6 số', 'released'],
       ['Đếm ngược & gửi lại OTP', 'in_progress'],
       ['Khoá giao dịch sau 3 lần sai', 'todo'],
     ]) {
@@ -592,8 +598,18 @@ export function seed(db, { reset = false } = {}) {
       });
     hist('tasks', t2, 'create', 'Tạo task "Xây dựng API thanh toán thẻ nội địa"', null, 'Nguyễn Văn An', -10, '02:00:00');
     hist('tasks', t2, 'update', null, [{ field: 'status', from: 'todo', to: 'in_progress' }], 'Hoàng Gia Huy', -9, '02:30:00');
-    hist('tasks', t2, 'update', null, [{ field: 'status', from: 'in_progress', to: 'review' }, { field: 'due_date', from: day(-1), to: day(1) }], 'Hoàng Gia Huy', -1, '09:15:00');
+    hist('tasks', t2, 'update', null, [{ field: 'status', from: 'in_progress', to: 'testing' }, { field: 'due_date', from: day(-1), to: day(1) }], 'Hoàng Gia Huy', -1, '09:15:00');
     hist('projects', pay, 'member', 'Thêm thành viên "Đỗ Quang Minh" (Designer)', null, 'Nguyễn Văn An', -20, '03:00:00');
+
+    // ---------- Người tạo & người yêu cầu ----------
+    db.prepare("UPDATE tasks SET created_by = 'Nguyễn Văn An', requester = 'Trần Thị Bình' WHERE project_id = ?").run(pay);
+    db.prepare("UPDATE tasks SET created_by = 'Trần Thị Bình', requester = 'Phòng Kinh doanh' WHERE project_id = ?").run(crm);
+    db.prepare("UPDATE tasks SET created_by = 'Hoàng Gia Huy' WHERE parent_id IS NOT NULL").run();
+    db.prepare("UPDATE tasks SET requester = 'Lê Minh Châu' WHERE title LIKE 'Chuẩn bị môi trường%'").run();
+    db.prepare("UPDATE test_cases SET created_by = 'Phạm Thu Dung'").run();
+    db.prepare('UPDATE bugs SET created_by = reporter').run();
+    db.prepare('UPDATE documents SET created_by = author').run();
+    db.prepare('UPDATE meetings SET created_by = facilitator').run();
   });
 
   console.log('Đã tạo dữ liệu mẫu.');

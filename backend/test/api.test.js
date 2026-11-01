@@ -151,7 +151,7 @@ describe('tasks', () => {
     let r = await req('POST', '/tasks', { project_id: P, title: 'Sort low', priority: 'low' });
     assert.equal(r.body.status, 'todo');
     const id = r.body.id;
-    r = await req('PATCH', `/tasks/${id}`, { status: 'done' });
+    r = await req('PATCH', `/tasks/${id}`, { status: 'released' });
     assert.ok(r.body.completed_at);
     r = await req('PATCH', `/tasks/${id}`, { status: 'in_progress' });
     assert.equal(r.body.completed_at, null);
@@ -361,7 +361,7 @@ describe('members & gantt', () => {
     await req('POST', `/projects/${p}/members`, { member_id: bao, role: 'developer' });
 
     await req('POST', '/tasks', { project_id: p, title: 'Đang làm', assignee: 'ngô bảo ', start_date: '2026-01-05', due_date: '2026-01-10' });
-    await req('POST', '/tasks', { project_id: p, title: 'Xong rồi', assignee: 'Ngô Bảo', status: 'done' });
+    await req('POST', '/tasks', { project_id: p, title: 'Xong rồi', assignee: 'Ngô Bảo', status: 'released' });
     await req('POST', '/tasks', { project_id: p2, title: 'Dự án khác', assignee: 'Ngô Bảo' });
     await req('POST', '/tasks', { project_id: p, title: 'Người khác', assignee: 'Ai đó' });
 
@@ -452,7 +452,7 @@ describe('meeting attachments', () => {
 describe('subtasks & task links', () => {
   test('subtask 1 cấp, tiến độ, xoá task cha xoá subtask', async () => {
     const parent = (await req('POST', '/tasks', { project_id: P, title: 'Cha' })).body.id;
-    const s1 = (await req('POST', '/tasks', { project_id: P, title: 'ZqSub 1', parent_id: parent, status: 'done' })).body.id;
+    const s1 = (await req('POST', '/tasks', { project_id: P, title: 'ZqSub 1', parent_id: parent, status: 'released' })).body.id;
     await req('POST', '/tasks', { project_id: P, title: 'ZqSub 2', parent_id: parent });
 
     let r = await req('GET', `/tasks/${parent}`);
@@ -499,7 +499,7 @@ describe('subtasks & task links', () => {
 
     r = await req('GET', `/tasks?project_id=${P}&q=A`);
     assert.equal(r.body.items.find((t) => t.id === a).blocked_by_count, 2);
-    await req('PATCH', `/tasks/${b}`, { status: 'done' });
+    await req('PATCH', `/tasks/${b}`, { status: 'released' });
     r = await req('GET', `/tasks?project_id=${P}&q=A`);
     assert.equal(r.body.items.find((t) => t.id === a).blocked_by_count, 1);
 
@@ -684,7 +684,7 @@ describe('milestones', () => {
     assert.ok(r.body.details.due_date);
     const m = (await req('POST', '/milestones', { project_id: P, name: 'Release 1', due_date: '2026-06-30' })).body;
     assert.equal(m.status, 'planned');
-    const a = (await req('POST', '/tasks', { project_id: P, title: 'M a', milestone_id: m.id, status: 'done' })).body;
+    const a = (await req('POST', '/tasks', { project_id: P, title: 'M a', milestone_id: m.id, status: 'released' })).body;
     await req('POST', '/tasks', { project_id: P, title: 'M b', milestone_id: m.id });
     assert.equal((await req('POST', '/tasks', { project_id: P2, title: 'x', milestone_id: m.id })).status, 400);
     r = await req('GET', `/milestones?project_id=${P}&q=Release`);
@@ -726,7 +726,7 @@ describe('settings & deadline notifications', () => {
     const late = (await req('POST', '/tasks', { project_id: p, title: 'Trễ', assignee: 'dev ntf', due_date: d(-2) })).body;
     await req('POST', '/tasks', { project_id: p, title: 'Sắp hạn', assignee: 'Dev Ntf', due_date: d(1) });
     await req('POST', '/tasks', { project_id: p, title: 'Còn xa', assignee: 'Dev Ntf', due_date: d(10) });
-    await req('POST', '/tasks', { project_id: p, title: 'Xong', assignee: 'Dev Ntf', due_date: d(-5), status: 'done' });
+    await req('POST', '/tasks', { project_id: p, title: 'Xong', assignee: 'Dev Ntf', due_date: d(-5), status: 'released' });
     await req('POST', '/milestones', { project_id: p, name: 'MS trễ', due_date: d(-1) });
 
     let r = await req('GET', `/notifications?project_id=${p}`);
@@ -859,5 +859,66 @@ describe('members status filter', () => {
     r = await req('GET', '/members?role=admin&limit=200');
     assert.ok(r.body.items.every((x) => x.is_admin === 1));
     assert.ok(!(await req('GET', '/members?role=member&limit=200')).body.items.some((x) => x.is_admin === 1));
+  });
+});
+
+describe('task workflow, creator, requester, status counts', () => {
+  test('trạng thái mới, người tạo tự ghi, người yêu cầu, đếm theo trạng thái, mô tả HTML', async () => {
+    const p = (await req('POST', '/projects', { code: 'WF', name: 'Workflow' })).body.id;
+    const me = (await req('GET', '/auth/me')).body.name;
+    let r = await req('POST', '/tasks', { project_id: p, title: 'WF1', requester: 'Khách hàng A', created_by: 'giả mạo' });
+    assert.equal(r.body.created_by, me, 'người tạo lấy theo tài khoản, không nhận từ client');
+    assert.equal(r.body.requester, 'Khách hàng A');
+    assert.equal(r.body.status, 'todo');
+    const t1 = r.body.id;
+    assert.equal((await req('PATCH', `/tasks/${t1}`, { status: 'done' })).status, 400, 'trạng thái cũ không còn hợp lệ');
+    for (const st of ['in_progress', 'done_dev', 'testing', 'ready_release']) {
+      r = await req('PATCH', `/tasks/${t1}`, { status: st });
+      assert.equal(r.body.completed_at, null, `${st} chưa đóng`);
+    }
+    r = await req('PATCH', `/tasks/${t1}`, { status: 'released' });
+    assert.ok(r.body.completed_at);
+    await req('POST', '/tasks', { project_id: p, title: 'WF2', status: 'canceled', due_date: '2020-01-01' });
+    await req('POST', '/tasks', { project_id: p, title: 'WF3', status: 'testing', due_date: '2020-01-01' });
+    await req('POST', '/tasks', { project_id: p, title: 'WF4', status: 'testing' });
+
+    r = await req('GET', `/tasks?project_id=${p}&counts=status&status=testing`);
+    assert.equal(r.body.total, 2, 'danh sách vẫn lọc theo trạng thái');
+    assert.deepEqual(r.body.counts, { released: 1, canceled: 1, testing: 2 }, 'số lượng bỏ qua bộ lọc trạng thái');
+    r = await req('GET', `/tasks?project_id=${p}&counts=status&q=WF3`);
+    assert.deepEqual(r.body.counts, { testing: 1 }, 'số lượng theo các bộ lọc khác');
+    r = await req('GET', `/tasks?project_id=${p}&overdue=true`);
+    assert.deepEqual(r.body.items.map((t) => t.title), ['WF3'], 'task Canceled không tính trễ hạn');
+
+    // mô tả HTML: lịch sử chỉ ghi "đã sửa nội dung"
+    await req('PATCH', `/tasks/${t1}`, { description: '<p>Có <strong>bảng</strong></p><table><tr><td>1</td></tr></table>' });
+    r = await req('GET', `/history?entity=tasks&entity_id=${t1}&limit=1`);
+    assert.deepEqual(r.body.items[0].changes, [{ field: 'description', changed: true }]);
+
+    // người tạo cho test case, bug
+    assert.equal((await req('POST', '/test-cases', { project_id: p, title: 'TC' })).body.created_by, me);
+    r = await req('POST', '/bugs', { project_id: p, title: 'B', reporter: 'Tester X' });
+    assert.equal(r.body.created_by, me);
+    assert.equal(r.body.reporter, 'Tester X');
+    assert.equal((await req('GET', `/bugs?project_id=${p}&sort=reporter`)).status, 200);
+  });
+
+  test('migration: trạng thái task cũ được chuyển sang trạng thái mới', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pm-st-'));
+    const file = join(dir, 'old.db');
+    try {
+      const first = openDb(file);
+      const p = first.prepare("INSERT INTO projects (code, name) VALUES ('OLD', 'Cũ')").run().lastInsertRowid;
+      first.prepare("INSERT INTO tasks (project_id, title, status) VALUES (?, 'a', 'review'), (?, 'b', 'done')").run(p, p);
+      first.close();
+      const again = openDb(file);
+      assert.deepEqual(
+        again.prepare('SELECT status FROM tasks ORDER BY id').all().map((r) => r.status),
+        ['done_dev', 'released'],
+      );
+      again.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

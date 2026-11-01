@@ -43,7 +43,8 @@ export const taskFields = [
     required: true,
     default: 'medium',
   },
-  { name: 'assignee', label: 'Người thực hiện', type: 'person' },
+  { name: 'assignee', label: 'PIC (người phụ trách)', type: 'person' },
+  { name: 'requester', label: 'Người yêu cầu', type: 'person' },
   { name: 'category_id', label: 'Danh mục', type: 'category' },
   { name: 'estimate_hours', label: 'Ước lượng (giờ)', type: 'number' },
   { name: 'start_date', label: 'Ngày bắt đầu', type: 'date' },
@@ -64,7 +65,12 @@ export const taskFields = [
     type: 'documents',
     hint: 'Chọn từ các tài liệu của dự án trong mục Tài liệu.',
   },
-  { name: 'description', label: 'Mô tả', type: 'textarea', rows: 5 },
+  {
+    name: 'description',
+    label: 'Mô tả',
+    type: 'richtext',
+    placeholder: 'Mô tả chi tiết task: yêu cầu, tiêu chí hoàn thành, ảnh minh hoạ, bảng…',
+  },
 ];
 
 export const testCaseFields = [
@@ -122,7 +128,7 @@ export const bugFields = [
   { name: 'environment', label: 'Môi trường', placeholder: 'VD: Chrome 130 / Windows 11 / staging' },
   { name: 'category_id', label: 'Danh mục', type: 'category' },
   { name: 'assignee', label: 'Người xử lý', type: 'person' },
-  { name: 'reporter', label: 'Người báo cáo', type: 'person' },
+  { name: 'reporter', label: 'Người báo bug', type: 'person' },
   { name: 'test_case_id', label: 'Test case liên quan', type: 'ref', source: 'testCases' },
   { name: 'task_id', label: 'Task liên quan', type: 'ref', source: 'tasks' },
   { name: 'description', label: 'Mô tả', type: 'textarea', rows: 3 },

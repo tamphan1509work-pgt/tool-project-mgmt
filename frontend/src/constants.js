@@ -7,10 +7,13 @@ export const LABELS = {
     critical: ['Khẩn cấp', 'red'],
   },
   taskStatus: {
-    todo: ['Cần làm', 'gray'],
-    in_progress: ['Đang làm', 'blue'],
-    review: ['Đang review', 'purple'],
-    done: ['Hoàn thành', 'green'],
+    todo: ['To Do', 'gray'],
+    in_progress: ['In Progress', 'blue'],
+    done_dev: ['Done Dev', 'purple'],
+    testing: ['Testing', 'amber'],
+    ready_release: ['Ready Release', 'teal'],
+    released: ['Released', 'green'],
+    canceled: ['Canceled', 'red'],
   },
   testType: {
     functional: ['Chức năng', 'gray'],
@@ -77,9 +80,19 @@ export const LABELS = {
 };
 
 export const options = (kind) => Object.entries(LABELS[kind]).map(([value, [label]]) => ({ value, label }));
-export const label = (kind, value) => LABELS[kind]?.[value]?.[0] ?? value ?? '';
+// Nhãn của trạng thái task cũ (chỉ còn xuất hiện trong lịch sử thay đổi)
+const LEGACY = { taskStatus: { review: 'Đang review (cũ)', done: 'Hoàn thành (cũ)' } };
+export const label = (kind, value) => LABELS[kind]?.[value]?.[0] ?? LEGACY[kind]?.[value] ?? value ?? '';
 
-export const PREFIX = { meetings: 'MTG', tasks: 'TASK', 'test-cases': 'TC', bugs: 'BUG', documents: 'DOC', members: 'MEM', milestones: 'MS' };
+export const PREFIX = {
+  meetings: 'MTG',
+  tasks: 'TASK',
+  'test-cases': 'TC',
+  bugs: 'BUG',
+  documents: 'DOC',
+  members: 'MEM',
+  milestones: 'MS',
+};
 export const code = (resource, id) =>
   resource === 'projects' ? `#${id}` : `${PREFIX[resource]}-${String(id).padStart(3, '0')}`;
 
@@ -90,14 +103,19 @@ export function fmtDate(s) {
   return `${d}/${m}/${y}`;
 }
 
-/** Thời điểm UTC từ SQLite ("YYYY-MM-DD HH:MM:SS") -> giờ địa phương */
+/** Thời điểm UTC từ SQLite ("YYYY-MM-DD HH:MM:SS") -> giờ địa phương dạng dd/mm/yyyy hh:mm:ss */
 export function fmtDateTime(s) {
   if (!s) return '';
-  const d = new Date(s.replace(' ', 'T') + 'Z');
+  const d = new Date(s.replace(' ', 'T') + (/[zZ]|[+-]\d\d:\d\d$/.test(s) ? '' : 'Z'));
   if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 export const todayStr = () => new Date().toLocaleDateString('sv');
 
-export const isOverdue = (task) => task.due_date && task.status !== 'done' && task.due_date < todayStr();
+/** Task đã đóng (Released / Canceled): không còn tính trễ hạn, tính là xong trong tiến độ */
+export const CLOSED_TASK_STATUSES = ['released', 'canceled'];
+export const isClosed = (status) => CLOSED_TASK_STATUSES.includes(status);
+
+export const isOverdue = (task) => task.due_date && !isClosed(task.status) && task.due_date < todayStr();

@@ -61,6 +61,11 @@ export function diffChanges(db, fields, before, after, linksBefore = {}, linksAf
     const from = before?.[name] ?? null;
     const to = after[name] ?? null;
     if (from === to || (from == null && to == null)) continue;
+    // Nội dung soạn thảo (HTML, có thể chứa ảnh): chỉ ghi nhận là đã sửa
+    if (f.type === 'html') {
+      changes.push({ field: name, changed: true });
+      continue;
+    }
     const change = { field: name, from: clip(from), to: clip(to) };
     if (f.type === 'ref') {
       change.fromText = refLabel(db, f.table, from);

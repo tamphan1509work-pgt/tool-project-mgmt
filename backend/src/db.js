@@ -281,6 +281,18 @@ function migrate(db) {
     db.exec('ALTER TABLE members ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1');
   }
 
+  // Trạng thái task mới (To Do → … → Released / Canceled): chuyển trạng thái cũ
+  db.exec("UPDATE tasks SET status = 'done_dev' WHERE status = 'review'");
+  db.exec("UPDATE tasks SET status = 'released' WHERE status = 'done'");
+
+  // Người tạo (tự ghi theo tài khoản đăng nhập) & người yêu cầu
+  for (const table of ['tasks', 'test_cases', 'bugs', 'documents', 'meetings']) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes('created_by')) db.exec(`ALTER TABLE ${table} ADD COLUMN created_by TEXT`);
+  }
+  const taskCols3 = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
+  if (!taskCols3.includes('requester')) db.exec('ALTER TABLE tasks ADD COLUMN requester TEXT');
+
   // Danh mục cho task, test case, bug, tài liệu
   for (const table of ['tasks', 'test_cases', 'bugs', 'documents']) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);

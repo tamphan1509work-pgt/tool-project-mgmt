@@ -5,7 +5,7 @@ import { openDb } from '../../../backend/src/db.js';
 import { seed } from '../../../backend/src/seed.js';
 import { setInitialData } from './shims/node-sqlite.js';
 
-const STORAGE_KEY = 'project-hub-demo-db-v9';
+const STORAGE_KEY = 'project-hub-demo-db-v10';
 // localStorage của trình duyệt chỉ chứa được vài MB nên giới hạn file đính kèm nhỏ hơn bản thật
 export const DEMO_MAX_UPLOAD = 1.5 * 1024 * 1024;
 

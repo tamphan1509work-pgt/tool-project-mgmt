@@ -109,7 +109,7 @@ export default function Dashboard() {
           to="/tasks"
           label="Task"
           value={counts.tasks}
-          sub={`${data.taskStatus.done ?? 0} hoàn thành · ${counts.overdueTasks} quá hạn`}
+          sub={`${(data.taskStatus.released ?? 0) + (data.taskStatus.canceled ?? 0)} đã đóng · ${counts.overdueTasks} quá hạn`}
           tone={counts.overdueTasks ? 'warn' : undefined}
         />
         <Stat

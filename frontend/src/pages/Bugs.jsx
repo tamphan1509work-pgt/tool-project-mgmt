@@ -68,12 +68,14 @@ export function BugList() {
           width: 150,
           render: (b) => b.assignee || <span className="muted">Chưa giao</span>,
         },
+        { key: 'reporter', title: 'Người báo bug', sort: 'reporter', width: 140, className: 'nowrap' },
+        { key: 'created_by', title: 'Người tạo', sort: 'created_by', width: 140, className: 'nowrap' },
         {
           key: 'created_at',
-          title: 'Ngày tạo',
+          title: 'Thời gian tạo',
           sort: 'created_at',
-          width: 130,
-          className: 'muted small',
+          width: 160,
+          className: 'small nowrap',
           render: (b) => fmtDateTime(b.created_at),
         },
       ]}
@@ -86,6 +88,7 @@ export function BugDetail() {
     <DetailPage
       resource="bugs"
       backLabel="Danh sách bug"
+      historyTab
       formFields={bugFields}
       badges={(b) => (
         <>
@@ -126,7 +129,9 @@ export function BugDetail() {
                 items={[
                   ['Danh mục', <CategoryBadge key="c" id={b.category_id} full />],
                   ['Người xử lý', b.assignee],
-                  ['Người báo cáo', b.reporter],
+                  ['Người báo bug', b.reporter],
+                  ['Người tạo', b.created_by],
+                  ['Thời gian tạo', fmtDateTime(b.created_at)],
                   ['Môi trường', b.environment],
                   ['Đã sửa lúc', fmtDateTime(b.resolved_at)],
                   [

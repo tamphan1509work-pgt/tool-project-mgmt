@@ -9,12 +9,13 @@ import { Badge, ErrorBox, Icon, Prose } from '../components/ui.jsx';
 import { code, fmtDate, fmtDateTime, isOverdue, LABELS, options } from '../constants.js';
 import { useAsync, useProject, useToast } from '../context.jsx';
 import { Subtasks, TaskDocuments, TaskLinks, TaskTitleMeta } from './TaskParts.jsx';
+import { RichText } from '../components/RichText.jsx';
 import { taskFields } from '../forms.js';
 
+// Trạng thái lọc bằng dãy nhãn kèm số lượng phía trên danh sách
 const FILTERS = [
-  { name: 'status', label: 'Trạng thái', options: options('taskStatus') },
   { name: 'priority', label: 'Ưu tiên', options: options('priority') },
-  { name: 'assignee', label: 'Người làm', source: 'people' },
+  { name: 'assignee', label: 'PIC', source: 'people' },
   categoryFilter,
   {
     name: 'milestone_id',
@@ -171,6 +172,7 @@ export function TaskList() {
       noun="task"
       formFields={taskFields}
       filters={FILTERS}
+      statusChips={{ field: 'status', kind: 'taskStatus' }}
       headerExtra={switcher}
       searchPlaceholder="Tìm theo tên, mô tả, người làm, mã…"
       columns={[
@@ -199,9 +201,19 @@ export function TaskList() {
           width: 120,
           render: (t) => <Badge kind="priority" value={t.priority} />,
         },
-        { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
-        { key: 'assignee', title: 'Người làm', width: 160 },
-        { key: 'due_date', title: 'Hạn', sort: 'due_date', width: 110, render: (t) => <Due task={t} /> },
+        { key: 'assignee', title: 'PIC', sort: 'assignee', width: 140, className: 'nowrap' },
+        { key: 'requester', title: 'Người yêu cầu', sort: 'requester', width: 140, className: 'nowrap' },
+        { key: 'due_date', title: 'Hạn', sort: 'due_date', width: 100, render: (t) => <Due task={t} /> },
+        { key: 'category_id', title: 'Danh mục', width: 140, render: (r) => <CategoryBadge id={r.category_id} /> },
+        { key: 'created_by', title: 'Người tạo', sort: 'created_by', width: 140, className: 'nowrap' },
+        {
+          key: 'created_at',
+          title: 'Thời gian tạo',
+          sort: 'created_at',
+          width: 160,
+          className: 'small nowrap',
+          render: (t) => fmtDateTime(t.created_at),
+        },
       ]}
     />
   );
@@ -213,6 +225,50 @@ export function TaskDetail() {
       resource="tasks"
       backLabel="Danh sách task"
       formFields={taskFields}
+      historyTab
+      tabs={(t) => [
+        {
+          key: 'test-cases',
+          label: 'Test case',
+          count: t.test_cases.length,
+          render: () => (
+            <Section
+              title={`Test case liên quan (${t.test_cases.length})`}
+              extra={
+                <Link to={`/test-cases?task_id=${t.id}`} className="small">
+                  Xem trong Test report
+                </Link>
+              }
+            >
+              <LinkedList
+                resource="test-cases"
+                items={t.test_cases}
+                render={(x) => <Badge kind="testStatus" value={x.status} />}
+                empty="Chưa có test case nào liên kết"
+              />
+            </Section>
+          ),
+        },
+        {
+          key: 'bugs',
+          label: 'Bug',
+          count: t.bugs.length,
+          render: () => (
+            <Section title={`Bug liên quan (${t.bugs.length})`}>
+              <LinkedList
+                resource="bugs"
+                items={t.bugs}
+                render={(x) => (
+                  <>
+                    <Badge kind="bugSeverity" value={x.severity} /> <Badge kind="bugStatus" value={x.status} />
+                  </>
+                )}
+                empty="Chưa có bug nào liên kết"
+              />
+            </Section>
+          ),
+        },
+      ]}
       badges={(t) => (
         <>
           <Badge kind="taskStatus" value={t.status} />
@@ -245,38 +301,11 @@ export function TaskDetail() {
         <div className="detail-grid">
           <div className="detail-main">
             <Section title="Mô tả">
-              <Prose text={t.description} placeholder="Chưa có mô tả" />
+              <RichText html={t.description} placeholder="Chưa có mô tả" />
             </Section>
             {!t.parent && <Subtasks task={t} reload={reload} />}
             <TaskDocuments task={t} reload={reload} />
             <TaskLinks task={t} reload={reload} />
-            <Section
-              title={`Test case (${t.test_cases.length})`}
-              extra={
-                <Link to={`/test-cases?task_id=${t.id}`} className="small">
-                  Xem trong Test report
-                </Link>
-              }
-            >
-              <LinkedList
-                resource="test-cases"
-                items={t.test_cases}
-                render={(x) => <Badge kind="testStatus" value={x.status} />}
-                empty="Chưa có test case nào liên kết"
-              />
-            </Section>
-            <Section title={`Bug (${t.bugs.length})`}>
-              <LinkedList
-                resource="bugs"
-                items={t.bugs}
-                render={(x) => (
-                  <>
-                    <Badge kind="bugSeverity" value={x.severity} /> <Badge kind="bugStatus" value={x.status} />
-                  </>
-                )}
-                empty="Chưa có bug nào liên kết"
-              />
-            </Section>
           </div>
           <aside className="detail-side">
             <Section title="Thông tin">
@@ -303,7 +332,10 @@ export function TaskDetail() {
                       </Link>
                     ),
                   ],
-                  ['Người thực hiện', t.assignee],
+                  ['PIC', t.assignee],
+                  ['Người yêu cầu', t.requester],
+                  ['Người tạo', t.created_by],
+                  ['Thời gian tạo', fmtDateTime(t.created_at)],
                   ['Ngày bắt đầu', fmtDate(t.start_date)],
                   ['Hạn hoàn thành', <Due key="d" task={t} />],
                   ['Ước lượng', t.estimate_hours != null ? `${t.estimate_hours} giờ` : null],

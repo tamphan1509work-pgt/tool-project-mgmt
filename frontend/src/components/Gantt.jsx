@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { code, fmtDate, label, todayStr } from '../constants.js';
+import { code, fmtDate, isClosed, label, LABELS, todayStr } from '../constants.js';
 import { Badge } from './ui.jsx';
 
 const DAY_MS = 86400000;
@@ -235,7 +235,7 @@ export default function Gantt({ data, zoom = 'week', showMemberRows = true }) {
                 );
               }
               const t = r.task;
-              const overdue = t.due_date && t.status !== 'done' && dayNum(t.due_date) < today;
+              const overdue = t.due_date && !isClosed(t.status) && dayNum(t.due_date) < today;
               return (
                 <div key={r.key} className="g-row g-row-task">
                   <div className="g-label g-indent-2">
@@ -267,7 +267,7 @@ export default function Gantt({ data, zoom = 'week', showMemberRows = true }) {
         <span>
           <i className="g-sw g-bar-project" /> Thời gian dự án
         </span>
-        {['todo', 'in_progress', 'review', 'done'].map((s) => (
+        {Object.keys(LABELS.taskStatus).map((s) => (
           <span key={s}>
             <i className={`g-sw g-status-${s}`} /> {label('taskStatus', s)}
           </span>

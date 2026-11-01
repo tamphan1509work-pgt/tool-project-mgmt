@@ -94,6 +94,7 @@ export function DocumentDetail() {
     <DetailPage
       resource="documents"
       backLabel="Danh sách tài liệu"
+      historyTab
       formFields={documentFields}
       badges={(d) => (
         <>
@@ -136,6 +137,8 @@ export function DocumentDetail() {
                 items={[
                   ['Danh mục', <CategoryBadge key="c" id={d.category_id} full />],
                   ['Người soạn', d.author],
+                  ['Người tạo', d.created_by],
+                  ['Thời gian tạo', fmtDateTime(d.created_at)],
                   ['Phiên bản', d.version && `v${d.version}`],
                   ['Link', d.url && <DocLink url={d.url}>{d.url}</DocLink>],
                   ['Cập nhật', fmtDateTime(d.updated_at)],

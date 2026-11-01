@@ -6,7 +6,7 @@ import Gantt, { ZOOMS } from '../components/Gantt.jsx';
 import ResourceList, { useParamSetter } from '../components/ResourceList.jsx';
 import { Badge, ErrorBox, Icon, Loading, Modal } from '../components/ui.jsx';
 import PasswordInput from '../components/PasswordInput.jsx';
-import { code, fmtDate, fmtDateTime, isOverdue } from '../constants.js';
+import { code, fmtDate, fmtDateTime, isOverdue, isClosed } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import { useAuth } from '../auth.jsx';
 import { memberFields } from '../forms.js';
@@ -510,7 +510,7 @@ export function MemberDetail() {
       badges={(m) => m.position && <span className="badge badge-gray">{m.position}</span>}
     >
       {(m, { reload }) => {
-        const openTasks = m.tasks.filter((t) => t.status !== 'done');
+        const openTasks = m.tasks.filter((t) => !isClosed(t.status));
         return (
           <>
             <MemberGantt member={m} />
@@ -579,7 +579,7 @@ export function MemberDetail() {
                               <td className="mono">
                                 <Link to={`/tasks/${t.id}`}>{code('tasks', t.id)}</Link>
                               </td>
-                              <td className={t.status === 'done' ? 'strike' : ''}>{t.title}</td>
+                              <td className={isClosed(t.status) ? 'strike' : ''}>{t.title}</td>
                               <td className="mono small">{t.project_code}</td>
                               <td>
                                 <Badge kind="taskStatus" value={t.status} />

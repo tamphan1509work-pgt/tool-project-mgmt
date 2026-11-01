@@ -5,7 +5,7 @@ import Attachments, { useUploader } from '../components/Attachments.jsx';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import ResourceList from '../components/ResourceList.jsx';
 import { Badge, Icon, Prose } from '../components/ui.jsx';
-import { code, fmtDate, isOverdue, options, todayStr } from '../constants.js';
+import { code, fmtDate, isOverdue, options, todayStr, isClosed } from '../constants.js';
 import { useLookup, useToast } from '../context.jsx';
 import { meetingFields } from '../forms.js';
 
@@ -107,7 +107,7 @@ function ActionItems({ meeting, reload }) {
                   <td className="mono" style={{ width: 90 }}>
                     <Link to={`/tasks/${t.id}`}>{code('tasks', t.id)}</Link>
                   </td>
-                  <td className={t.status === 'done' ? 'strike' : ''}>{t.title}</td>
+                  <td className={isClosed(t.status) ? 'strike' : ''}>{t.title}</td>
                   <td style={{ width: 150 }}>{t.assignee || <span className="muted">Chưa giao</span>}</td>
                   <td style={{ width: 110 }} className={isOverdue(t) ? 'text-danger' : ''}>
                     {fmtDate(t.due_date)}

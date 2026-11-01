@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { code } from '../constants.js';
+import { code, LABELS } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import CopyLinkButton from './CopyLink.jsx';
 import EntityForm, { splitFiles } from './EntityForm.jsx';
@@ -64,6 +64,38 @@ export function Filters({ filters, params, setParam }) {
   });
 }
 
+/** Nhãn lọc theo trạng thái kèm số lượng (bấm để lọc, bấm lại để bỏ lọc) */
+export function StatusChips({ kind, counts, value, onChange }) {
+  const entries = Object.entries(LABELS[kind]);
+  const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : null;
+  return (
+    <div className="status-chips" role="group" aria-label="Lọc theo trạng thái">
+      <button
+        type="button"
+        className={`status-chip ${value === '' ? 'active' : ''}`}
+        onClick={() => onChange('')}
+        aria-pressed={value === ''}
+      >
+        Tất cả <span className="chip-count">{total ?? '…'}</span>
+      </button>
+      {entries.map(([key, [text, tone]]) => {
+        const n = counts?.[key] ?? 0;
+        return (
+          <button
+            key={key}
+            type="button"
+            className={`status-chip tone-${tone} ${value === key ? 'active' : ''} ${counts && !n ? 'is-empty' : ''}`}
+            onClick={() => onChange(value === key ? '' : key)}
+            aria-pressed={value === key}
+          >
+            <span className={`dot seg-${tone}`} /> {text} <span className="chip-count">{counts ? n : '…'}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function useParamSetter() {
   const [params, setParams] = useSearchParams();
   const setParam = (name, value, { keepPage = false } = {}) => {
@@ -101,6 +133,7 @@ export default function ResourceList({
   onFiles, // (record, File[]) => Promise: tải file chọn trong form lên sau khi lưu
   rowActions, // (row) => JSX: nút thêm trên từng dòng
   reloadKey, // đổi giá trị để tải lại danh sách
+  statusChips, // { field, kind }: nhãn lọc trạng thái kèm số lượng phía trên danh sách
 }) {
   const [params, setParam, setParams] = useParamSetter();
   const navigate = useNavigate();
@@ -115,6 +148,7 @@ export default function ResourceList({
   delete query.page;
   delete query.view;
   if (scoped) query.project_id = projectId;
+  if (statusChips) query.counts = statusChips.field;
   const key = params.toString();
 
   const { data, loading, error, reload } = useAsync(
@@ -186,6 +220,14 @@ export default function ResourceList({
 
   return (
     <>
+      {statusChips && (
+        <StatusChips
+          kind={statusChips.kind}
+          counts={data?.counts}
+          value={params.get(statusChips.field) ?? ''}
+          onChange={(v) => setParam(statusChips.field, v)}
+        />
+      )}
       <div className="toolbar">
         <SearchBox value={params.get('q') ?? ''} onChange={(v) => setParam('q', v)} placeholder={searchPlaceholder} />
         <Filters filters={filters} params={params} setParam={setParam} />

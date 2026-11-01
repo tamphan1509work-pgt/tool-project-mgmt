@@ -78,7 +78,7 @@ export function deadlineItems(db, { projectId = null, daysBefore = 1, includeMil
     .prepare(
       `SELECT t.id, t.title, t.assignee, t.due_date, t.status, t.priority, t.project_id, p.code AS project_code, p.name AS project_name
        FROM tasks t JOIN projects p ON p.id = t.project_id
-       WHERE t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= ?
+       WHERE t.status NOT IN ('released', 'canceled') AND t.due_date IS NOT NULL AND t.due_date <= ?
          AND p.status NOT IN ('completed', 'cancelled') ${scope}
        ORDER BY t.due_date, t.id`,
     )

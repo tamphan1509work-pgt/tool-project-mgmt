@@ -110,7 +110,11 @@ function Changes({ entity, changes }) {
         {changes.map((c) => (
           <tr key={c.field}>
             <th>{fieldLabel(entity, c.field)}</th>
-            {c.added || c.removed ? (
+            {c.changed ? (
+              <td colSpan={2} className="muted">
+                Đã chỉnh sửa nội dung
+              </td>
+            ) : c.added || c.removed ? (
               <td colSpan={2}>
                 {c.added?.length > 0 && (
                   <span className="text-success">+ {c.added.map((x) => x.label).join(', ')}</span>

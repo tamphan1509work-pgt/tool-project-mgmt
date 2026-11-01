@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code, fmtDateTime } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import CopyLinkButton from './CopyLink.jsx';
-import HistorySection from './History.jsx';
+import HistorySection, { HistoryList } from './History.jsx';
 import EntityForm, { splitFiles } from './EntityForm.jsx';
 import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
 
@@ -25,6 +25,8 @@ export default function DetailPage({
   onChanged,
   onFiles,
   history = true, // hiện "Lịch sử thay đổi" ở cuối trang
+  historyTab = false, // hoặc thành một tab riêng
+  tabs, // (data) => [{ key, label, count, render: () => JSX }]: tab bổ sung bên cạnh tab "Chi tiết"
   backTo, // đường quay lại (chuỗi hoặc (data) => chuỗi); mặc định là danh sách
 }) {
   const { id } = useParams();
@@ -86,6 +88,24 @@ export default function DetailPage({
     }
   };
 
+  const [search, setSearch] = useSearchParams();
+  const tabList = data
+    ? [
+        { key: '', label: 'Chi tiết' },
+        ...(tabs?.(data) ?? []).filter(Boolean),
+        ...(history && historyTab
+          ? [
+              {
+                key: 'history',
+                label: 'Lịch sử thay đổi',
+                render: () => <HistoryPanel entity={resource} id={data.id} reloadKey={data} />,
+              },
+            ]
+          : []),
+      ]
+    : [];
+  const activeTab = tabList.some((t) => t.key === search.get('tab')) ? search.get('tab') : '';
+
   if (loading && !data) return <Loading />;
   if (error && !data)
     return (
@@ -128,9 +148,40 @@ export default function DetailPage({
         </div>
       </div>
 
-      {children(data, { reload, update })}
+      {tabList.length > 1 ? (
+        <>
+          <div className="tabs detail-tabs" role="tablist">
+            {tabList.map((t) => (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={activeTab === t.key}
+                className={activeTab === t.key ? 'active' : ''}
+                onClick={() =>
+                  setSearch(
+                    (prev) => {
+                      const next = new URLSearchParams(prev);
+                      if (t.key) next.set('tab', t.key);
+                      else next.delete('tab');
+                      return next;
+                    },
+                    { replace: true },
+                  )
+                }
+              >
+                {t.label}
+                {t.count != null && <span className="tab-count">{t.count}</span>}
+              </button>
+            ))}
+          </div>
+          {activeTab === '' && children(data, { reload, update })}
+          {tabList.find((t) => t.key === activeTab && t.key !== '')?.render()}
+        </>
+      ) : (
+        children(data, { reload, update })
+      )}
 
-      {history && <HistorySection entity={resource} id={data.id} reloadKey={data} />}
+      {history && !historyTab && <HistorySection entity={resource} id={data.id} reloadKey={data} />}
 
       {editing && (
         <Modal wide title={`Sửa ${codeOf(data)}`} onClose={() => setEditing(false)}>
@@ -181,5 +232,14 @@ export function LinkedList({ resource, items, render, empty = 'Không có' }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Tab "Lịch sử thay đổi" */
+function HistoryPanel({ entity, id, reloadKey }) {
+  return (
+    <section className="card section">
+      <HistoryList params={{ entity, entity_id: id }} reloadKey={reloadKey} />
+    </section>
   );
 }

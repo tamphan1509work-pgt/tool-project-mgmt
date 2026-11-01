@@ -5,7 +5,7 @@ import CopyLinkButton from '../components/CopyLink.jsx';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import EntityForm from '../components/EntityForm.jsx';
 import { Badge, Empty, ErrorBox, Icon, Loading, Modal, Prose } from '../components/ui.jsx';
-import { code, fmtDate, fmtDateTime, isOverdue, todayStr } from '../constants.js';
+import { code, fmtDate, fmtDateTime, isOverdue, todayStr, isClosed } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
 import { milestoneFields } from '../forms.js';
 
@@ -175,7 +175,7 @@ export function MilestoneDetail() {
       )}
     >
       {(m) => {
-        const done = m.tasks.filter((t) => t.status === 'done').length;
+        const done = m.tasks.filter((t) => isClosed(t.status)).length;
         const summary = { task_count: m.tasks.length, done_count: done };
         return (
           <div className="detail-grid">
@@ -214,7 +214,7 @@ export function MilestoneDetail() {
                             <td className="mono">
                               <Link to={`/tasks/${t.id}`}>{code('tasks', t.id)}</Link>
                             </td>
-                            <td className={t.status === 'done' ? 'strike' : ''}>
+                            <td className={isClosed(t.status) ? 'strike' : ''}>
                               {t.parent_id && <span className="muted small">↳ </span>}
                               {t.title}
                             </td>

@@ -4,6 +4,7 @@ import { code, label } from '../constants.js';
 import { FilePicker } from './Attachments.jsx';
 import { categoryTree } from '../categories.js';
 import DocumentsField from './DocumentsField.jsx';
+import RichTextEditor from './RichText.jsx';
 
 const REF_RESOURCE = {
   meetings: 'meetings',
@@ -88,6 +89,8 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
         </select>
       );
     }
+    case 'richtext':
+      return <RichTextEditor id={id} value={value} onChange={onChange} placeholder={field.placeholder} />;
     case 'documents':
       return <DocumentsField id={id} value={value ?? []} onChange={onChange} />;
     case 'checkbox':
@@ -209,7 +212,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
           return (
             <div
               key={f.name}
-              className={`field ${f.full || ['textarea', 'multiref', 'files', 'documents'].includes(f.type) ? 'field-full' : ''}`}
+              className={`field ${f.full || ['textarea', 'multiref', 'files', 'documents', 'richtext'].includes(f.type) ? 'field-full' : ''}`}
             >
               <label htmlFor={id}>
                 {f.label}

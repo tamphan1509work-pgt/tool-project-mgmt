@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { Section } from '../components/DetailPage.jsx';
 import DocumentPicker from '../components/DocumentPicker.jsx';
 import { Badge, Icon } from '../components/ui.jsx';
-import { code, fmtDate, isOverdue, label } from '../constants.js';
+import { code, fmtDate, isOverdue, label, isClosed } from '../constants.js';
 import { useLookup, useToast } from '../context.jsx';
 import { DocLink } from './Documents.jsx';
 
@@ -22,7 +22,7 @@ export function TaskTitleMeta({ task }) {
           ☑ {task.subtask_done_count}/{task.subtask_count} subtask
         </span>
       )}
-      {task.blocked_by_count > 0 && task.status !== 'done' && (
+      {task.blocked_by_count > 0 && !isClosed(task.status) && (
         <span className="chip chip-danger" title="Đang chờ task phụ thuộc hoàn thành">
           ⛔ chờ {task.blocked_by_count} task
         </span>
@@ -37,7 +37,7 @@ export function Subtasks({ task, reload }) {
   const { lookup, refreshLookup } = useLookup();
   const [form, setForm] = useState({ title: '', assignee: '', due_date: '' });
   const [busy, setBusy] = useState(false);
-  const done = task.subtasks.filter((s) => s.status === 'done').length;
+  const done = task.subtasks.filter((s) => isClosed(s.status)).length;
   const total = task.subtasks.length;
 
   const add = async (e) => {
@@ -66,7 +66,7 @@ export function Subtasks({ task, reload }) {
 
   const toggle = async (s) => {
     try {
-      await api.update('tasks', s.id, { status: s.status === 'done' ? 'todo' : 'done' });
+      await api.update('tasks', s.id, { status: isClosed(s.status) ? 'todo' : 'released' });
       reload();
     } catch (err) {
       toast(err.message, 'error');
@@ -82,11 +82,11 @@ export function Subtasks({ task, reload }) {
           </div>
           <ul className="subtask-list">
             {task.subtasks.map((s, i) => (
-              <li key={s.id} className={s.status === 'done' ? 'is-done' : ''}>
+              <li key={s.id} className={isClosed(s.status) ? 'is-done' : ''}>
                 <span className="col-stt">{i + 1}</span>
                 <input
                   type="checkbox"
-                  checked={s.status === 'done'}
+                  checked={isClosed(s.status)}
                   onChange={() => toggle(s)}
                   aria-label={`Đánh dấu hoàn thành ${s.title}`}
                 />
@@ -229,7 +229,7 @@ export function TaskLinks({ task, reload }) {
     [task.links],
   );
   const candidates = lookup.tasks.filter((t) => t.id !== task.id && !linkedIds.has(t.id));
-  const waiting = task.links.depends_on.filter((t) => t.status !== 'done');
+  const waiting = task.links.depends_on.filter((t) => !isClosed(t.status));
   const count = linkedIds.size;
 
   const add = async (e) => {
@@ -260,7 +260,7 @@ export function TaskLinks({ task, reload }) {
 
   return (
     <Section title={`Task liên quan & phụ thuộc (${count})`}>
-      {waiting.length > 0 && task.status !== 'done' && (
+      {waiting.length > 0 && !isClosed(task.status) && (
         <div className="warn-box">
           ⛔ Task này đang chờ {waiting.length} task phụ thuộc chưa hoàn thành:{' '}
           {waiting.map((t) => code('tasks', t.id)).join(', ')}

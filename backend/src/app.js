@@ -555,7 +555,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     const memberTasks = db.prepare(
       `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.completed_at, t.created_at, t.project_id
        FROM tasks t WHERE ${ASSIGNED('t.assignee', '?')}
-       ${projectId ? 'AND t.project_id = ?' : ''} ${includeDone ? '' : "AND t.status <> 'done'"}
+       ${projectId ? 'AND t.project_id = ?' : ''} ${includeDone ? '' : "AND t.status NOT IN ('released', 'canceled')"}
        ORDER BY COALESCE(t.start_date, t.due_date, substr(t.created_at, 1, 10)), t.id`,
     );
     const projectById = db.prepare(`SELECT ${projectCols} FROM projects p WHERE p.id = ?`);
@@ -821,7 +821,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
         documents: n('SELECT COUNT(*) AS n FROM documents WHERE project_id = ?'),
         members: n('SELECT COUNT(*) AS n FROM project_members WHERE project_id = ?'),
         openBugs: n(`SELECT COUNT(*) AS n FROM bugs WHERE project_id = ? AND ${OPEN}`),
-        overdueTasks: n("SELECT COUNT(*) AS n FROM tasks WHERE project_id = ? AND due_date < ? AND status <> 'done'", d),
+        overdueTasks: n("SELECT COUNT(*) AS n FROM tasks WHERE project_id = ? AND due_date < ? AND status NOT IN ('released', 'canceled')", d),
       },
       taskStatus: countBy(db, 'tasks', 'status', p),
       testStatus,
@@ -845,20 +845,20 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
         .all(p, d),
       overdueTasks: db
         .prepare(
-          "SELECT * FROM tasks WHERE project_id = ? AND due_date < ? AND status <> 'done' ORDER BY due_date LIMIT 8",
+          "SELECT * FROM tasks WHERE project_id = ? AND due_date < ? AND status NOT IN ('released', 'canceled') ORDER BY due_date LIMIT 8",
         )
         .all(p, d),
       dueSoonTasks: db
         .prepare(
           `SELECT * FROM tasks WHERE project_id = ? AND due_date >= ? AND due_date <= date(?, '+7 day')
-           AND status <> 'done' ORDER BY due_date LIMIT 8`,
+           AND status NOT IN ('released', 'canceled') ORDER BY due_date LIMIT 8`,
         )
         .all(p, d, d),
       milestones: db
         .prepare(
           `SELECT m.*,
              (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = m.id) AS task_count,
-             (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = m.id AND t.status = 'done') AS done_count
+             (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = m.id AND t.status IN ('released', 'canceled')) AS done_count
            FROM milestones m WHERE m.project_id = ? AND m.status NOT IN ('completed', 'cancelled')
            ORDER BY m.due_date LIMIT 5`,
         )

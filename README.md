@@ -11,16 +11,16 @@
 | **Thông báo deadline** | **Cài đặt** bật / tắt: chuông thông báo trên web (task / milestone trễ hoặc sắp đến hạn, xem theo dự án hoặc tất cả) và **email tổng hợp hằng ngày** (giờ gửi, nhắc trước N ngày, người nhận: người thực hiện / PM / email thêm; mỗi mục chỉ nhắc một lần mỗi ngày; xem trước & gửi ngay). Từng thành viên có thể tắt email của mình |
 | **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
 | **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** ngay khi tạo / sửa biên bản hoặc tại trang chi tiết (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
-| **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp. **Tài liệu liên quan** chọn từ mục Tài liệu ngay khi tạo / sửa task, hoặc thêm / gỡ trên trang task. **Subtask** (1 cấp) với thanh tiến độ, đánh dấu xong nhanh. **Task liên quan / phụ thuộc**: *phụ thuộc vào*, *đang chặn*, *liên quan*, cảnh báo khi task đang chờ task khác, chặn phụ thuộc vòng tròn |
-| **Test report** | Hai tab: **Danh sách test case** và **Thống kê** (tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module / độ ưu tiên / loại test / người thực hiện, các lần chạy gần đây); danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
-| **Bug** | Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
+| **Task** | Trạng thái: **To Do → In Progress → Done Dev → Testing → Ready Release → Released**, hoặc **Canceled** (Released / Canceled = đã đóng). Danh sách có **nhãn lọc trạng thái kèm số lượng**, cột PIC, Người yêu cầu, Người tạo, Thời gian tạo; dạng bảng hoặc Kanban kéo-thả. **Mô tả dùng trình soạn thảo**: định dạng chữ, tiêu đề, danh sách đánh số / gạch đầu dòng, bảng, ảnh (chọn, dán hoặc kéo thả), liên kết, trích dẫn, khối mã — nội dung được lọc mã độc (DOMPurify) khi hiển thị. Trang chi tiết có các tab **Chi tiết** (mô tả, subtask, tài liệu liên quan, task liên quan / phụ thuộc), **Test case**, **Bug**, **Lịch sử thay đổi** |
+| **Test report** | Danh sách có cột Người tạo, Thời gian tạo; chi tiết có tab Lịch sử thay đổi. Hai tab: **Danh sách test case** và **Thống kê** (tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module / độ ưu tiên / loại test / người thực hiện, các lần chạy gần đây); danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
+| **Bug** | Cột Người báo bug, Người tạo, Thời gian tạo; chi tiết có tab Lịch sử thay đổi. Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
 | **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
 
 Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Menu trái **thu gọn / mở rộng** được (nút ☰ hoặc "Thu gọn menu"; chỉ còn icon, có chú thích khi rê chuột) và được ghi nhớ. Dự án đang làm việc được chọn ở thanh bên trái.
 
 Mọi mục (biên bản, task, test case, bug, tài liệu, dự án, thành viên) có nút **Copy link** ở trang chi tiết và trên từng dòng danh sách: người nhận mở link là vào thẳng mục đó (tự chuyển sang đúng dự án). Bản demo dùng link artifact kèm `#tasks-12` (đặt link gốc qua biến `VITE_SHARE_URL` khi build demo).
 
-Mọi bảng có cột **STT**; danh sách hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL.
+Thời gian hiển thị theo định dạng `dd/mm/yyyy hh:mm:ss`. Người tạo được ghi tự động theo tài khoản đăng nhập. Mọi bảng có cột **STT**; danh sách hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL.
 
 ## Công nghệ
 
@@ -128,6 +128,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | DELETE | `/attachments/:id` | Xoá file |
 | POST | `/tasks/:id/links` | Liên kết task `{ other_task_id, type: depends_on \| blocks \| relates }` |
 | DELETE | `/task-links/:id` | Gỡ liên kết |
+| GET | `/tasks?counts=status` | Kèm `counts`: số task theo trạng thái (theo các bộ lọc khác, bỏ qua bộ lọc trạng thái) |
 | GET | `/{resource}?category_id=` | Lọc task / test case / bug / tài liệu theo danh mục (gồm danh mục con; `none` = chưa phân loại) |
 | GET | `/history?entity=tasks&entity_id=12` hoặc `?project_id=` | Lịch sử thay đổi của một mục / cả dự án. Người thao tác lấy theo tài khoản đăng nhập |
 | GET / PUT | `/settings` | Cài đặt thông báo |
@@ -152,7 +153,7 @@ Lỗi validate trả về `400` dạng `{ "error": "Dữ liệu không hợp l�
 ### Giá trị enum
 
 - Độ ưu tiên: `low`, `medium`, `high`, `critical`
-- Trạng thái task: `todo`, `in_progress`, `review`, `done`
+- Trạng thái task: `todo`, `in_progress`, `done_dev`, `testing`, `ready_release`, `released`, `canceled` (dữ liệu cũ: `review` → `done_dev`, `done` → `released`)
 - Loại test: `functional`, `integration`, `regression`, `smoke`, `performance`, `security`, `ui`
 - Trạng thái test case: `not_run`, `passed`, `failed`, `blocked`
 - Mức độ bug: `minor`, `major`, `critical`, `blocker`

@@ -54,6 +54,7 @@ export function validate(db, fields, body, { partial = false } = {}) {
 
     switch (f.type) {
       case 'string':
+      case 'html':
       case 'text': {
         if (typeof v !== 'string' && typeof v !== 'number') {
           errors[name] = 'Phải là chuỗi ký tự';
@@ -249,10 +250,11 @@ export function createResource(db, cfg) {
     return row;
   };
 
-  router.get('/', (req, res) => {
+  /** Điều kiện WHERE từ tham số lọc (q, các field lọc, danh mục, bộ lọc riêng) */
+  const buildWhere = (query) => {
     const where = [];
     const params = [];
-    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const q = typeof query.q === 'string' ? query.q.trim() : '';
     if (q) {
       const like = `%${q.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
       const parts = cfg.searchable.map((c) => `${c} LIKE ? ESCAPE '\\'`);
@@ -266,7 +268,7 @@ export function createResource(db, cfg) {
       where.push(`(${parts.join(' OR ')})`);
     }
     for (const name of cfg.filterable) {
-      const raw = req.query[name];
+      const raw = query[name];
       if (typeof raw !== 'string' || raw === '') continue;
       if (raw === 'none') {
         where.push(`${name} IS NULL`);
@@ -278,7 +280,7 @@ export function createResource(db, cfg) {
       params.push(...values);
     }
     // ?category_id=X: thuộc danh mục X hoặc các danh mục con của X; ?category_id=none: chưa phân loại
-    const cat = req.query.category_id;
+    const cat = query.category_id;
     if (cfg.fields.category_id && typeof cat === 'string' && cat !== '') {
       if (cat === 'none') where.push('category_id IS NULL');
       else {
@@ -288,8 +290,13 @@ export function createResource(db, cfg) {
         params.push(Number(cat) || 0);
       }
     }
-    cfg.extraFilters?.(req.query, where, params);
+    cfg.extraFilters?.(query, where, params);
 
+    return { where, params };
+  };
+
+  router.get('/', (req, res) => {
+    const { where, params } = buildWhere(req.query);
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const sortKey = Object.hasOwn(cfg.sortable, req.query.sort) ? req.query.sort : cfg.defaultSort;
     const order =
@@ -305,7 +312,19 @@ export function createResource(db, cfg) {
          LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset);
-    res.json({ items, total, limit, offset });
+    // Số lượng theo trạng thái (bỏ qua chính bộ lọc trạng thái) để hiển thị các nhãn lọc kèm số
+    let counts;
+    if (cfg.countBy && req.query.counts === cfg.countBy) {
+      const c = buildWhere({ ...req.query, [cfg.countBy]: '' });
+      const cw = c.where.length ? `WHERE ${c.where.join(' AND ')}` : '';
+      counts = Object.fromEntries(
+        db
+          .prepare(`SELECT ${cfg.countBy} AS k, COUNT(*) AS n FROM ${table} ${cw} GROUP BY ${cfg.countBy}`)
+          .all(...c.params)
+          .map((r) => [r.k, r.n]),
+      );
+    }
+    res.json({ items, total, limit, offset, ...(counts ? { counts } : {}) });
   });
 
   router.get('/:id', (req, res) => {
@@ -315,6 +334,7 @@ export function createResource(db, cfg) {
 
   router.post('/', (req, res) => {
     const data = validate(db, cfg.fields, req.body);
+    if (cfg.trackCreator) data.created_by = req.user?.name ?? null;
     cfg.beforeSave?.(data, null, db, req);
     checkSameProject(data, null);
     const links = splitLinks(data);

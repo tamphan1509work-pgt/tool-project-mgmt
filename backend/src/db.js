@@ -164,6 +164,20 @@ CREATE TABLE IF NOT EXISTS task_links (
 );
 CREATE INDEX IF NOT EXISTS idx_task_links_other ON task_links(other_task_id);
 
+-- Danh mục trong dự án (có thể lồng nhau: danh mục con)
+CREATE TABLE IF NOT EXISTS categories (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  parent_id    INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+  name         TEXT NOT NULL,
+  description  TEXT,
+  color        TEXT NOT NULL DEFAULT 'blue',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id);
+CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
+
 -- Liên kết nhiều-nhiều giữa task và tài liệu
 CREATE TABLE IF NOT EXISTS task_documents (
   task_id      INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -187,6 +201,15 @@ function migrate(db) {
     db.exec('ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE');
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
+
+  // Danh mục cho task, test case, bug, tài liệu
+  for (const table of ['tasks', 'test_cases', 'bugs', 'documents']) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes('category_id')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`);
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_category ON ${table}(category_id)`);
+  }
 
   // Phiên bản trước lưu file biên bản họp ở bảng riêng -> chuyển sang bảng attachments dùng chung
   if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meeting_attachments'").get()) {

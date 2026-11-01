@@ -245,6 +245,17 @@ export function createResource(db, cfg) {
       where.push(`${name} IN (${values.map(() => '?').join(',')})`);
       params.push(...values);
     }
+    // ?category_id=X: thuộc danh mục X hoặc các danh mục con của X; ?category_id=none: chưa phân loại
+    const cat = req.query.category_id;
+    if (cfg.fields.category_id && typeof cat === 'string' && cat !== '') {
+      if (cat === 'none') where.push('category_id IS NULL');
+      else {
+        where.push(`category_id IN (
+          WITH RECURSIVE sub(id) AS (SELECT ? UNION ALL SELECT c.id FROM categories c JOIN sub ON c.parent_id = sub.id)
+          SELECT id FROM sub)`);
+        params.push(Number(cat) || 0);
+      }
+    }
     cfg.extraFilters?.(req.query, where, params);
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';

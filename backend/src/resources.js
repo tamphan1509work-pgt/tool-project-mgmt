@@ -8,6 +8,7 @@ export const ENUMS = {
   testResult: ['passed', 'failed', 'blocked'],
   bugSeverity: ['minor', 'major', 'critical', 'blocker'],
   bugStatus: ['new', 'in_progress', 'resolved', 'closed', 'reopened', 'rejected'],
+  categoryColor: ['gray', 'blue', 'green', 'amber', 'red', 'purple'],
   taskLinkType: ['depends_on', 'blocks', 'relates'],
   projectStatus: ['planning', 'active', 'on_hold', 'completed', 'cancelled'],
   memberRole: ['pm', 'ba', 'tech_lead', 'developer', 'tester', 'designer', 'devops', 'stakeholder'],
@@ -78,6 +79,7 @@ export const tasks = {
   fields: {
     project_id: projectRef,
     title: { type: 'string', required: true },
+    category_id: { type: 'ref', table: 'categories', sameProject: true },
     description: { type: 'text' },
     status: { type: 'enum', values: ENUMS.taskStatus, default: 'todo' },
     priority: { type: 'enum', values: ENUMS.priority, default: 'medium' },
@@ -199,6 +201,7 @@ export const testCases = {
   fields: {
     project_id: projectRef,
     title: { type: 'string', required: true },
+    category_id: { type: 'ref', table: 'categories', sameProject: true },
     module: { type: 'string' },
     type: { type: 'enum', values: ENUMS.testType, default: 'functional' },
     priority: { type: 'enum', values: ENUMS.priority, default: 'medium' },
@@ -258,6 +261,7 @@ export const bugs = {
   fields: {
     project_id: projectRef,
     title: { type: 'string', required: true },
+    category_id: { type: 'ref', table: 'categories', sameProject: true },
     description: { type: 'text' },
     steps_to_reproduce: { type: 'text' },
     expected_result: { type: 'text' },
@@ -366,8 +370,56 @@ export const projects = {
         bugs: one('SELECT COUNT(*) AS n FROM bugs WHERE project_id = ?'),
         openBugs: one("SELECT COUNT(*) AS n FROM bugs WHERE project_id = ? AND status IN ('new','in_progress','reopened')"),
         documents: one('SELECT COUNT(*) AS n FROM documents WHERE project_id = ?'),
+        categories: one('SELECT COUNT(*) AS n FROM categories WHERE project_id = ?'),
       },
     };
+  },
+};
+
+export const categories = {
+  table: 'categories',
+  label: 'danh mục',
+  fields: {
+    project_id: projectRef,
+    name: { type: 'string', required: true, max: 100 },
+    parent_id: { type: 'ref', table: 'categories', sameProject: true },
+    description: { type: 'text', max: 2000 },
+    color: { type: 'enum', values: ENUMS.categoryColor, default: 'blue' },
+  },
+  selectExtra: `
+    (SELECT COUNT(*) FROM tasks x WHERE x.category_id = categories.id) AS task_count,
+    (SELECT COUNT(*) FROM test_cases x WHERE x.category_id = categories.id) AS test_case_count,
+    (SELECT COUNT(*) FROM bugs x WHERE x.category_id = categories.id) AS bug_count,
+    (SELECT COUNT(*) FROM documents x WHERE x.category_id = categories.id) AS document_count`,
+  searchable: ['name', 'description'],
+  filterable: ['project_id', 'parent_id'],
+  sortable: { name: 'name', ...timestamps },
+  defaultSort: 'name',
+  defaultOrder: 'ASC',
+  beforeSave(data, existing, db) {
+    const err = (field, msg) => new HttpError(400, 'Dữ liệu không hợp lệ', { [field]: msg });
+    const parentId = data.parent_id !== undefined ? data.parent_id : existing?.parent_id;
+    // Không cho chọn chính nó hoặc danh mục con của nó làm danh mục cha (tránh vòng lặp)
+    if (existing && data.parent_id != null) {
+      let cur = data.parent_id;
+      const parentOf = db.prepare('SELECT parent_id FROM categories WHERE id = ?');
+      while (cur != null) {
+        if (cur === existing.id) throw err('parent_id', 'Không thể chọn chính nó hoặc danh mục con của nó làm danh mục cha');
+        cur = parentOf.get(cur)?.parent_id ?? null;
+      }
+    }
+    // Tên không trùng giữa các danh mục cùng cấp
+    const name = data.name ?? existing?.name;
+    const projectId = data.project_id ?? existing?.project_id;
+    if (data.name !== undefined || data.parent_id !== undefined) {
+      const dup = db
+        .prepare(
+          `SELECT 1 FROM categories WHERE project_id = ? AND lower(name) = lower(?) AND id <> ?
+           AND COALESCE(parent_id, 0) = COALESCE(?, 0)`,
+        )
+        .get(projectId, name, existing?.id ?? 0, parentId ?? null);
+      if (dup) throw err('name', 'Đã có danh mục cùng tên ở cấp này');
+    }
   },
 };
 
@@ -459,6 +511,7 @@ export const documents = {
   fields: {
     project_id: projectRef,
     title: { type: 'string', required: true },
+    category_id: { type: 'ref', table: 'categories', sameProject: true },
     type: { type: 'enum', values: ENUMS.documentType, default: 'specification' },
     version: { type: 'string', max: 30 },
     status: { type: 'enum', values: ENUMS.documentStatus, default: 'draft' },

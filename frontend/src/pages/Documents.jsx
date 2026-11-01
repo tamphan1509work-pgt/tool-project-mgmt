@@ -1,3 +1,5 @@
+import CategoryBadge from '../components/CategoryBadge.jsx';
+import { categoryFilter } from '../categories.js';
 import DetailPage, { InfoList, LinkedList, Section } from '../components/DetailPage.jsx';
 import ResourceList, { useParamSetter } from '../components/ResourceList.jsx';
 import { Badge, Prose } from '../components/ui.jsx';
@@ -48,6 +50,7 @@ export function DocumentList() {
         filters={[
           { name: 'status', label: 'Trạng thái', options: options('documentStatus') },
           { name: 'author', label: 'Người soạn', source: 'people' },
+          categoryFilter,
         ]}
         columns={[
           { key: 'title', title: 'Tên tài liệu', sort: 'title', render: (d) => <strong>{d.title}</strong> },
@@ -76,6 +79,7 @@ export function DocumentList() {
             width: 130,
             render: (d) => <Badge kind="documentStatus" value={d.status} />,
           },
+          { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
           { key: 'author', title: 'Người soạn', width: 150 },
           { key: 'task_count', title: 'Task liên kết', width: 100, className: 'num' },
           { key: 'url', title: 'Link', width: 70, render: (d) => <DocLink url={d.url} /> },
@@ -130,6 +134,7 @@ export function DocumentDetail() {
             <Section title="Thông tin">
               <InfoList
                 items={[
+                  ['Danh mục', <CategoryBadge key="c" id={d.category_id} full />],
                   ['Người soạn', d.author],
                   ['Phiên bản', d.version && `v${d.version}`],
                   ['Link', d.url && <DocLink url={d.url}>{d.url}</DocLink>],

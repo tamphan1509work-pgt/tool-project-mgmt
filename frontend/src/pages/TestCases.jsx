@@ -1,3 +1,5 @@
+import CategoryBadge from '../components/CategoryBadge.jsx';
+import { categoryFilter } from '../categories.js';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
@@ -141,6 +143,13 @@ function ReportStats() {
 
       <BreakdownTable title="Theo module" rows={data.byModule} renderKey={(m) => m.module} total={s} />
       <BreakdownTable
+        title="Theo danh mục"
+        rows={data.byCategory}
+        renderKey={(m, raw) =>
+          raw ? String(m.key) : m.key ? <CategoryBadge id={m.key} full /> : <span className="muted">{m.name}</span>
+        }
+      />
+      <BreakdownTable
         title="Theo độ ưu tiên"
         rows={data.byPriority}
         renderKey={(m, raw) => (raw ? m.key : <Badge kind="priority" value={m.key} />)}
@@ -256,10 +265,12 @@ function TestCaseTable() {
         { name: 'priority', label: 'Ưu tiên', options: options('priority') },
         { name: 'type', label: 'Loại', options: options('testType') },
         { name: 'module', label: 'Module', source: 'modules' },
+        categoryFilter,
       ]}
       columns={[
         { key: 'title', title: 'Tên test case', sort: 'title', render: (t) => <strong>{t.title}</strong> },
         { key: 'module', title: 'Module', sort: 'module', width: 140 },
+        { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
         { key: 'type', title: 'Loại', width: 110, render: (t) => label('testType', t.type) },
         {
           key: 'priority',
@@ -495,6 +506,7 @@ export function TestCaseDetail() {
               <Section title="Thông tin">
                 <InfoList
                   items={[
+                    ['Danh mục', <CategoryBadge key="c" id={tc.category_id} full />],
                     ['Module', tc.module],
                     ['Loại', label('testType', tc.type)],
                     ['Chạy lần cuối', fmtDateTime(tc.last_run_at)],

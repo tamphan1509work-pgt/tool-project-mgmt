@@ -12,7 +12,7 @@
     "build": "npm run build -w frontend",
     "build:demo": "npm run build:demo -w frontend",
     "start": "npm run start -w backend",
-    "seed": "npm run seed -w backend",
+    "seed": "npm run seed -w backend --",
     "test": "npm test -w backend"
   },
   "devDependencies": {

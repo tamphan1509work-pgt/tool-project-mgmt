@@ -596,3 +596,13 @@ input:focus, select:focus, textarea:focus {
 .share-input { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
 .report-stats { display: flex; flex-direction: column; gap: 16px; }
 .report-stats .report { margin-bottom: 0; }
+
+/* ---------- Danh mục ---------- */
+.page-intro { margin: -4px 0 14px; max-width: 75ch; }
+.category-name { display: flex; align-items: center; gap: 8px; }
+.category-desc { display: block; font-weight: 400; }
+.tree-branch { color: var(--muted); }
+.cat-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px; }
+.badge-category { font-weight: 500; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.documents-field { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.documents-field .pending-files { width: 100%; }

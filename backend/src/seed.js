@@ -22,6 +22,7 @@ const TABLES = [
   'tasks',
   'meetings',
   'documents',
+  'categories',
   'project_members',
   'members',
   'projects',
@@ -501,6 +502,42 @@ export function seed(db, { reset = false } = {}) {
       status: 'new',
       reporter: 'Trần Thị Bình',
     });
+
+    // ---------- Danh mục & phân loại ----------
+    const cat = (project_id, name, color, parent_id = null, description = null) =>
+      insert('categories', { project_id, name, color, parent_id, description });
+    const cCard = cat(pay, 'Thanh toán thẻ', 'blue', null, 'Các luồng thanh toán bằng thẻ');
+    const cDomestic = cat(pay, 'Thẻ nội địa (NAPAS)', 'blue', cCard);
+    cat(pay, 'Thẻ quốc tế', 'blue', cCard);
+    const cOtp = cat(pay, 'Xác thực OTP', 'purple');
+    const cInfra = cat(pay, 'Hạ tầng & DevOps', 'gray');
+    const cQuality = cat(pay, 'Bảo mật & hiệu năng', 'red');
+    const cProcess = cat(pay, 'Quy trình dự án', 'amber');
+    const cCustomer = cat(crm, 'Quản lý khách hàng', 'green');
+    cat(crm, 'Báo cáo bán hàng', 'amber');
+    const cCrmArch = cat(crm, 'Kiến trúc', 'gray');
+
+    const assign = (table, categoryId, ...patterns) => {
+      for (const pattern of patterns) {
+        db.prepare(`UPDATE ${table} SET category_id = ? WHERE title LIKE ?`).run(categoryId, pattern);
+      }
+    };
+    assign('tasks', cDomestic, 'Xây dựng API thanh toán%', 'Khởi tạo giao dịch NAPAS', 'Xử lý callback%', 'API truy vấn%', 'Viết unit test%');
+    assign('tasks', cOtp, 'Màn hình nhập & xác nhận OTP', 'Giao diện nhập OTP%', 'Đếm ngược%', 'Khoá giao dịch sau%');
+    assign('tasks', cInfra, 'Thiết kế kiến trúc service%', 'Chuẩn bị môi trường staging');
+    assign('tasks', cProcess, 'Áp dụng quy tắc PR%', 'Viết test case cho luồng hoàn tiền');
+    assign('tasks', cCard, 'Tối ưu giao diện thanh toán%');
+    assign('tasks', cCustomer, 'Phỏng vấn người dùng%', 'Wireframe màn hình quản lý khách hàng', 'Dựng khung dự án frontend CRM');
+    assign('tasks', cCrmArch, 'Đề xuất kiến trúc%');
+    assign('test_cases', cDomestic, 'Thanh toán thành công%', 'Truy vấn trạng thái%');
+    assign('test_cases', cOtp, 'Nhập sai OTP%', 'OTP hết hạn%');
+    assign('test_cases', cQuality, 'API thanh toán phản hồi%', 'Không lộ số thẻ%');
+    assign('bugs', cOtp, 'Nhập sai OTP%', 'Nút "Gửi lại OTP"%');
+    assign('bugs', cDomestic, 'Callback NAPAS%');
+    assign('documents', cDomestic, 'Đặc tả API thanh toán%');
+    assign('documents', cOtp, 'Thiết kế UI màn hình thanh toán%');
+    assign('documents', cInfra, 'Thiết kế kiến trúc hệ thống');
+    assign('documents', cCustomer, 'Tài liệu đặc tả nghiệp vụ CRM');
   });
 
   console.log('Đã tạo dữ liệu mẫu.');

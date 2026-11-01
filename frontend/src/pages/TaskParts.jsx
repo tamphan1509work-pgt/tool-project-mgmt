@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { Section } from '../components/DetailPage.jsx';
-import { Badge, Icon, Modal } from '../components/ui.jsx';
-import { code, fmtDate, isOverdue, label, options } from '../constants.js';
+import DocumentPicker from '../components/DocumentPicker.jsx';
+import { Badge, Icon } from '../components/ui.jsx';
+import { code, fmtDate, isOverdue, label } from '../constants.js';
 import { useLookup, useToast } from '../context.jsx';
 import { DocLink } from './Documents.jsx';
 
@@ -138,102 +139,6 @@ export function Subtasks({ task, reload }) {
 }
 
 /* ---------------- Tài liệu liên quan (chọn từ mục Tài liệu) ---------------- */
-function DocumentPicker({ task, onClose, onSaved }) {
-  const { lookup } = useLookup();
-  const toast = useToast();
-  const [q, setQ] = useState('');
-  const [type, setType] = useState('');
-  const [picked, setPicked] = useState(() => new Set());
-  const [busy, setBusy] = useState(false);
-  const linked = new Set(task.document_ids);
-  const available = lookup.documents.filter((d) => !linked.has(d.id));
-  const shown = available.filter(
-    (d) =>
-      (!type || d.type === type) &&
-      (!q || `${d.title} ${code('documents', d.id)} ${d.version ?? ''}`.toLowerCase().includes(q.toLowerCase())),
-  );
-
-  const toggle = (id) =>
-    setPicked((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      await api.update('tasks', task.id, { document_ids: [...task.document_ids, ...picked] });
-      toast(`Đã thêm ${picked.size} tài liệu vào ${code('tasks', task.id)}`);
-      onSaved();
-    } catch (err) {
-      toast(err.message, 'error');
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal wide title="Thêm tài liệu liên quan" onClose={onClose}>
-      <div className="picker">
-        <div className="toolbar">
-          <input
-            type="search"
-            className="search"
-            placeholder="Tìm tài liệu theo tên, mã, phiên bản…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoFocus
-          />
-          <select aria-label="Loại tài liệu" value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="">Tất cả loại</option>
-            {options('documentType').map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {available.length === 0 ? (
-          <div className="empty">
-            Tất cả tài liệu của dự án đã được liên kết, hoặc dự án chưa có tài liệu.{' '}
-            <Link to="/documents">Mở mục Tài liệu</Link> để thêm tài liệu mới.
-          </div>
-        ) : shown.length === 0 ? (
-          <div className="empty">Không có tài liệu phù hợp.</div>
-        ) : (
-          <ul className="picker-list">
-            {shown.map((d) => (
-              <li key={d.id}>
-                <label>
-                  <input type="checkbox" checked={picked.has(d.id)} onChange={() => toggle(d.id)} />
-                  <span className="mono muted">{code('documents', d.id)}</span>
-                  <span className="picker-title">{d.title}</span>
-                  <Badge kind="documentType" value={d.type} />
-                  {d.version && <span className="muted small">v{d.version}</span>}
-                  <Badge kind="documentStatus" value={d.status} />
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="form-actions">
-          <Link to="/documents" className="btn btn-ghost">
-            Quản lý tài liệu
-          </Link>
-          <div className="spacer" />
-          <button className="btn" onClick={onClose}>
-            Huỷ
-          </button>
-          <button className="btn btn-primary" disabled={busy || picked.size === 0} onClick={save}>
-            Thêm {picked.size || ''} tài liệu
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 export function TaskDocuments({ task, reload }) {
   const toast = useToast();
   const [picking, setPicking] = useState(false);
@@ -282,11 +187,17 @@ export function TaskDocuments({ task, reload }) {
       )}
       {picking && (
         <DocumentPicker
-          task={task}
+          excludeIds={task.document_ids}
           onClose={() => setPicking(false)}
-          onSaved={() => {
-            setPicking(false);
-            reload();
+          onConfirm={async (ids) => {
+            try {
+              await api.update('tasks', task.id, { document_ids: [...task.document_ids, ...ids] });
+              toast(`Đã thêm ${ids.length} tài liệu vào ${code('tasks', task.id)}`);
+              setPicking(false);
+              reload();
+            } catch (err) {
+              toast(err.message, 'error');
+            }
           }}
         />
       )}

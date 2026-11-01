@@ -574,3 +574,53 @@ describe('test run attachments', () => {
     }
   });
 });
+
+describe('categories', () => {
+  test('danh mục con, chống vòng lặp, trùng tên, gán & lọc theo cây, xoá', async () => {
+    const mk = async (body) => req('POST', '/categories', { project_id: P, ...body });
+    const root = (await mk({ name: 'Backend' })).body;
+    assert.equal(root.color, 'blue');
+    const child = (await mk({ name: 'API', parent_id: root.id, color: 'green' })).body;
+    const grand = (await mk({ name: 'Auth', parent_id: child.id })).body;
+    assert.equal((await mk({ name: 'api', parent_id: root.id })).status, 400, 'trùng tên cùng cấp');
+    assert.equal((await mk({ name: 'API' })).status, 201, 'trùng tên khác cấp được');
+    assert.equal((await req('PATCH', `/categories/${root.id}`, { parent_id: grand.id })).status, 400, 'vòng lặp');
+    assert.equal((await req('PATCH', `/categories/${root.id}`, { parent_id: root.id })).status, 400);
+    const p2cat = (await req('POST', '/categories', { project_id: P2, name: 'Khác' })).body;
+    assert.equal((await mk({ name: 'X', parent_id: p2cat.id })).status, 400, 'cha khác dự án');
+
+    const t1 = (await req('POST', '/tasks', { project_id: P, title: 'CatT1', category_id: grand.id })).body;
+    await req('POST', '/tasks', { project_id: P, title: 'CatT2', category_id: root.id });
+    await req('POST', '/tasks', { project_id: P, title: 'CatT3' });
+    assert.equal((await req('POST', '/tasks', { project_id: P, title: 'x', category_id: p2cat.id })).status, 400);
+    await req('POST', '/bugs', { project_id: P, title: 'CatBug', category_id: child.id });
+    await req('POST', '/test-cases', { project_id: P, title: 'CatTC', category_id: child.id });
+    await req('POST', '/documents', { project_id: P, title: 'CatDoc', category_id: root.id });
+
+    let r = await req('GET', `/tasks?project_id=${P}&q=CatT&category_id=${root.id}`);
+    assert.deepEqual(r.body.items.map((t) => t.title).sort(), ['CatT1', 'CatT2'], 'gồm danh mục con');
+    r = await req('GET', `/tasks?project_id=${P}&q=CatT&category_id=${child.id}`);
+    assert.deepEqual(r.body.items.map((t) => t.title), ['CatT1']);
+    r = await req('GET', `/tasks?project_id=${P}&q=CatT&category_id=none`);
+    assert.deepEqual(r.body.items.map((t) => t.title), ['CatT3']);
+    assert.equal((await req('GET', `/bugs?project_id=${P}&category_id=${root.id}`)).body.total, 1);
+    assert.equal((await req('GET', `/test-cases?project_id=${P}&category_id=${root.id}`)).body.total, 1);
+    assert.equal((await req('GET', `/documents?project_id=${P}&category_id=${root.id}`)).body.total, 1);
+
+    r = await req('GET', `/categories?project_id=${P}&q=API`);
+    const api = r.body.items.find((c) => c.id === child.id);
+    assert.equal(api.bug_count, 1);
+    assert.equal(api.test_case_count, 1);
+    r = await req('GET', `/lookup?project_id=${P}`);
+    assert.ok(r.body.categories.some((c) => c.id === grand.id && c.parent_id === child.id));
+    r = await req('GET', `/test-report?project_id=${P}`);
+    assert.ok(r.body.byCategory.some((c) => c.name === 'API' && c.total === 1));
+
+    // xoá danh mục: danh mục con lên cấp gốc, mục bên trong thành "chưa phân loại"
+    await req('DELETE', `/categories/${child.id}`);
+    assert.equal((await req('GET', `/categories/${grand.id}`)).body.parent_id, null);
+    assert.equal((await req('GET', `/tasks/${t1.id}`)).body.category_id, grand.id);
+    r = await req('GET', `/bugs?project_id=${P}&q=CatBug`);
+    assert.equal(r.body.items[0].category_id, null);
+  });
+});

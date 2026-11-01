@@ -5,6 +5,7 @@ import { hashToPath, pathToHash } from './links.js';
 import { Empty, Icon, Loading } from './components/ui.jsx';
 import { ConfirmProvider, LookupProvider, ProjectProvider, ToastProvider, useConfirm, useProject } from './context.jsx';
 import { BugDetail, BugList } from './pages/Bugs.jsx';
+import { CategoryList } from './pages/Categories.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { DocumentDetail, DocumentList } from './pages/Documents.jsx';
 import { MeetingDetail, MeetingList } from './pages/Meetings.jsx';
@@ -31,6 +32,7 @@ const TITLES = {
   '': 'Tổng quan dự án',
   projects: 'Quản lý dự án',
   members: 'Quản lý thành viên',
+  categories: 'Danh mục dự án',
   meetings: 'Quản lý meeting minutes',
   tasks: 'Quản lý task',
   'test-cases': 'Test report',
@@ -164,6 +166,9 @@ function Layout({ children, onReset }) {
           <NavLink to="/projects" className="nav-link">
             <Icon name="folder" /> Dự án
           </NavLink>
+          <NavLink to="/categories" className="nav-link nav-sub">
+            Danh mục
+          </NavLink>
           <NavLink to="/members" className="nav-link">
             <Icon name="people" /> Thành viên
           </NavLink>
@@ -211,6 +216,14 @@ export default function App() {
                 <Route path="/projects/:id" element={<ProjectDetail />} />
                 <Route path="/members" element={<MemberList />} />
                 <Route path="/members/:id" element={<MemberDetail />} />
+                <Route
+                  path="/categories"
+                  element={
+                    <RequireProject>
+                      <CategoryList />
+                    </RequireProject>
+                  }
+                />
                 <Route
                   path="/"
                   element={

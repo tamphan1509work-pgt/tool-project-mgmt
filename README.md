@@ -5,9 +5,10 @@
 | Phân hệ | Chức năng |
 |---|---|
 | **Dự án & thành viên** | Danh sách dự án (mã, tên, trạng thái, thời gian), số task/bug đang mở. Trong từng dự án: thêm thành viên (chọn người có sẵn hoặc tạo mới), gán **vai trò trong dự án** (PM, BA, Tech lead, Developer, Tester, Designer, DevOps, Stakeholder), đổi vai trò, gỡ thành viên. Một người có thể tham gia nhiều dự án với vai trò khác nhau |
+| **Danh mục** | (Menu *Dự án › Danh mục*) Danh mục dạng cây (danh mục cha / con, màu nhãn) cho từng dự án. Task, test case, bug và tài liệu chọn danh mục khi tạo / sửa; danh sách có cột và bộ lọc danh mục (lọc danh mục cha gồm cả danh mục con); trang danh mục hiển thị số task / test case / bug / tài liệu và bấm để xem; thống kê Test report có thêm "Theo danh mục" |
 | **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
 | **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** ngay khi tạo / sửa biên bản hoặc tại trang chi tiết (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
-| **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp. **Tài liệu liên quan** chọn từ mục Tài liệu (thêm / gỡ ngay trên trang task). **Subtask** (1 cấp) với thanh tiến độ, đánh dấu xong nhanh. **Task liên quan / phụ thuộc**: *phụ thuộc vào*, *đang chặn*, *liên quan*, cảnh báo khi task đang chờ task khác, chặn phụ thuộc vòng tròn |
+| **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp. **Tài liệu liên quan** chọn từ mục Tài liệu ngay khi tạo / sửa task, hoặc thêm / gỡ trên trang task. **Subtask** (1 cấp) với thanh tiến độ, đánh dấu xong nhanh. **Task liên quan / phụ thuộc**: *phụ thuộc vào*, *đang chặn*, *liên quan*, cảnh báo khi task đang chờ task khác, chặn phụ thuộc vòng tròn |
 | **Test report** | Hai tab: **Danh sách test case** và **Thống kê** (tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module / độ ưu tiên / loại test / người thực hiện, các lần chạy gần đây); danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
 | **Bug** | Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
 | **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
@@ -86,7 +87,7 @@ frontend/
 
 ## REST API
 
-Tất cả endpoint nằm dưới `/api`. `{resource}` là một trong `projects`, `members`, `meetings`, `tasks`, `test-cases`, `bugs`, `documents`.
+Tất cả endpoint nằm dưới `/api`. `{resource}` là một trong `projects`, `members`, `categories`, `meetings`, `tasks`, `test-cases`, `bugs`, `documents`.
 
 Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự án: khi tạo phải gửi `project_id` (không đổi được sau đó), khi liệt kê lọc bằng `?project_id=`. Các liên kết (cuộc họp, task, test case, tài liệu) phải cùng dự án.
 
@@ -106,6 +107,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | DELETE | `/attachments/:id` | Xoá file |
 | POST | `/tasks/:id/links` | Liên kết task `{ other_task_id, type: depends_on \| blocks \| relates }` |
 | DELETE | `/task-links/:id` | Gỡ liên kết |
+| GET | `/{resource}?category_id=` | Lọc task / test case / bug / tài liệu theo danh mục (gồm danh mục con; `none` = chưa phân loại) |
 | GET / POST | `/projects/:id/members` | Danh sách / thêm thành viên dự án `{ member_id }` hoặc `{ name, email }` kèm `role` |
 | PATCH / DELETE | `/projects/:id/members/:memberId` | Đổi vai trò `{ role }` / gỡ khỏi dự án |
 | GET | `/gantt?project_id=&member_id=&include_done=true` | Dữ liệu biểu đồ Gantt: thành viên → dự án (vai trò) → task |

@@ -45,7 +45,7 @@ export function Filters({ filters, params, setParam }) {
         </label>
       );
     }
-    const opts = f.options ?? (lookup[f.source] ?? []).map((v) => ({ value: v, label: v }));
+    const opts = f.optionsFrom?.(lookup) ?? f.options ?? (lookup[f.source] ?? []).map((v) => ({ value: v, label: v }));
     return (
       <select
         key={f.name}

@@ -6,6 +6,7 @@ import { createResource, HttpError, parseId, today, validate } from './resource.
 import {
   ASSIGNED,
   bugs,
+  categories,
   documents,
   ENUMS,
   meetings,
@@ -395,6 +396,16 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
       `CASE priority ${ENUMS.priority.map((v, i) => `WHEN '${v}' THEN ${-i}`).join(' ')} END`,
     );
     const byType = groupBy('type', 'total DESC');
+    const byCategory = db
+      .prepare(
+        `SELECT t.category_id AS key, COALESCE(c.name, '(Chưa phân loại)') AS name,
+           COUNT(*) AS total, SUM(t.status = 'passed') AS passed, SUM(t.status = 'failed') AS failed,
+           SUM(t.status = 'blocked') AS blocked, SUM(t.status = 'not_run') AS not_run
+         FROM test_cases t LEFT JOIN categories c ON c.id = t.category_id
+         WHERE t.project_id = ? GROUP BY t.category_id ORDER BY c.name IS NULL, c.name`,
+      )
+      .all(project.id)
+      .map(rate);
     // Theo người chạy: mỗi lần chạy là một lượt thực thi
     const byTester = db
       .prepare(
@@ -418,6 +429,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
       byModule: byModule.map(rate),
       byPriority,
       byType,
+      byCategory,
       byTester,
       recentRuns,
       lastRun,
@@ -429,6 +441,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
   api.use('/projects', createResource(db, projects));
   api.use('/members', createResource(db, members));
   api.use('/documents', createResource(db, documents));
+  api.use('/categories', createResource(db, categories));
   api.use('/meetings', createResource(db, meetings));
   api.use('/tasks', createResource(db, tasks));
   api.use('/test-cases', createResource(db, testCases));
@@ -443,6 +456,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
         projects: allProjects,
         allMembers,
         members: [],
+        categories: [],
         meetings: [],
         tasks: [],
         testCases: [],
@@ -477,7 +491,12 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
         .all(id),
       testCases: db.prepare('SELECT id, title, status FROM test_cases WHERE project_id = ? ORDER BY id DESC').all(id),
       documents: db
-        .prepare('SELECT id, title, type, version, status FROM documents WHERE project_id = ? ORDER BY type, title')
+        .prepare(
+          'SELECT id, title, type, version, status, category_id FROM documents WHERE project_id = ? ORDER BY type, title',
+        )
+        .all(id),
+      categories: db
+        .prepare('SELECT id, name, parent_id, color FROM categories WHERE project_id = ? ORDER BY name')
         .all(id),
       modules: db
         .prepare(

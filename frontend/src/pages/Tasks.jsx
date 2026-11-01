@@ -1,3 +1,5 @@
+import CategoryBadge from '../components/CategoryBadge.jsx';
+import { categoryFilter } from '../categories.js';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
@@ -13,6 +15,7 @@ const FILTERS = [
   { name: 'status', label: 'Trạng thái', options: options('taskStatus') },
   { name: 'priority', label: 'Ưu tiên', options: options('priority') },
   { name: 'assignee', label: 'Người làm', source: 'people' },
+  categoryFilter,
   { name: 'overdue', label: 'Quá hạn', type: 'toggle' },
   { name: 'parent_id', label: 'Ẩn subtask', type: 'toggle', value: 'none' },
 ];
@@ -114,6 +117,11 @@ function Board({ switcher }) {
                     {t.title}
                   </Link>
                   <TaskTitleMeta task={t} />
+                  {t.category_id && (
+                    <div>
+                      <CategoryBadge id={t.category_id} />
+                    </div>
+                  )}
                   <div className="board-card-meta">
                     <span className="mono muted">{code('tasks', t.id)}</span>
                     <Badge kind="priority" value={t.priority} />
@@ -183,6 +191,7 @@ export function TaskList() {
           width: 120,
           render: (t) => <Badge kind="priority" value={t.priority} />,
         },
+        { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
         { key: 'assignee', title: 'Người làm', width: 160 },
         { key: 'due_date', title: 'Hạn', sort: 'due_date', width: 110, render: (t) => <Due task={t} /> },
       ]}
@@ -277,6 +286,7 @@ export function TaskDetail() {
                         ],
                       ]
                     : []),
+                  ['Danh mục', <CategoryBadge key="c" id={t.category_id} full />],
                   ['Người thực hiện', t.assignee],
                   ['Ngày bắt đầu', fmtDate(t.start_date)],
                   ['Hạn hoàn thành', <Due key="d" task={t} />],

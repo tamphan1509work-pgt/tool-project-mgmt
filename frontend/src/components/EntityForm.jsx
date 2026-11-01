@@ -2,6 +2,8 @@ import { useId, useState } from 'react';
 import { useLookup } from '../context.jsx';
 import { code, label } from '../constants.js';
 import { FilePicker } from './Attachments.jsx';
+import { categoryTree } from '../categories.js';
+import DocumentsField from './DocumentsField.jsx';
 
 const REF_RESOURCE = { meetings: 'meetings', tasks: 'tasks', testCases: 'test-cases', documents: 'documents' };
 
@@ -60,6 +62,28 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
       return <textarea rows={field.rows ?? 4} {...common} />;
     case 'url':
       return <input type="url" inputMode="url" {...common} />;
+    case 'category': {
+      // Danh mục dạng cây; field.excludeSelf: không cho chọn chính nó / danh mục con (khi chọn danh mục cha)
+      const tree = categoryTree(lookup.categories);
+      const self = field.excludeSelf && record?.id ? tree.find((c) => c.id === record.id) : null;
+      const blocked = new Set(self ? [self.id, ...self.descendants] : []);
+      return (
+        <select {...common}>
+          <option value="">{field.emptyLabel ?? '— Chưa phân loại —'}</option>
+          {tree
+            .filter((c) => !blocked.has(c.id))
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {'\u00a0\u00a0\u00a0'.repeat(c.depth)}
+                {c.depth ? '└ ' : ''}
+                {c.name}
+              </option>
+            ))}
+        </select>
+      );
+    }
+    case 'documents':
+      return <DocumentsField id={id} value={value ?? []} onChange={onChange} />;
     case 'files':
       return <FilePicker id={id} value={value ?? []} onChange={onChange} />;
     case 'multiref':
@@ -128,7 +152,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
   const [values, setValues] = useState(() => {
     const v = {};
     for (const f of fields)
-      v[f.name] = initial[f.name] ?? f.default ?? (f.type === 'multiref' || f.type === 'files' ? [] : '');
+      v[f.name] = initial[f.name] ?? f.default ?? (['multiref', 'files', 'documents'].includes(f.type) ? [] : '');
     return v;
   });
   const [errors, setErrors] = useState({});
@@ -143,11 +167,11 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
     const data = {};
     for (const f of fields) {
       const v = values[f.name];
-      if (f.type === 'multiref' || f.type === 'files') {
+      if (['multiref', 'files', 'documents'].includes(f.type)) {
         data[f.name] = v ?? [];
         continue;
       }
-      data[f.name] = v === '' ? null : f.type === 'ref' || f.type === 'number' ? Number(v) : v;
+      data[f.name] = v === '' ? null : ['ref', 'number', 'category'].includes(f.type) ? Number(v) : v;
     }
     try {
       await onSubmit(data);
@@ -166,7 +190,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
           return (
             <div
               key={f.name}
-              className={`field ${f.full || f.type === 'textarea' || f.type === 'multiref' || f.type === 'files' ? 'field-full' : ''}`}
+              className={`field ${f.full || ['textarea', 'multiref', 'files', 'documents'].includes(f.type) ? 'field-full' : ''}`}
             >
               <label htmlFor={id}>
                 {f.label}

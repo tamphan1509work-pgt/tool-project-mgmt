@@ -296,6 +296,7 @@ export function ProjectDetail() {
                   />
                   <StatLink to="/bugs" label="Bug" value={s.bugs} sub={`${s.openBugs} đang mở`} onOpen={open} />
                   <StatLink to="/documents" label="Tài liệu" value={s.documents} onOpen={open} />
+                  <StatLink to="/categories" label="Danh mục" value={s.categories} onOpen={open} />
                 </div>
               </section>
               <Members project={p} reload={reload} />

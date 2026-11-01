@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { LABELS } from '../constants.js';
 
 export function Badge({ kind, value }) {
@@ -42,17 +42,30 @@ export function Icon({ name, size = 18 }) {
   );
 }
 
+// Các hộp thoại đang mở (hộp mở sau nằm trên): Escape chỉ đóng hộp trên cùng
+const modalStack = [];
+
 export function Modal({ title, onClose, children, wide }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
+    const token = {};
+    modalStack.push(token);
+    const onKey = (e) => {
+      if (e.key === 'Escape' && modalStack[modalStack.length - 1] === token) {
+        e.stopPropagation();
+        closeRef.current();
+      }
+    };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
+      modalStack.splice(modalStack.indexOf(token), 1);
+      if (!modalStack.length) document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

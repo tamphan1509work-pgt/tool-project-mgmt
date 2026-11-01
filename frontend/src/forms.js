@@ -1,3 +1,4 @@
+import { CATEGORY_COLORS } from './categories.js';
 import { options, todayStr } from './constants.js';
 
 export const meetingFields = [
@@ -43,6 +44,7 @@ export const taskFields = [
     default: 'medium',
   },
   { name: 'assignee', label: 'Người thực hiện', type: 'person' },
+  { name: 'category_id', label: 'Danh mục', type: 'category' },
   { name: 'estimate_hours', label: 'Ước lượng (giờ)', type: 'number' },
   { name: 'start_date', label: 'Ngày bắt đầu', type: 'date' },
   { name: 'due_date', label: 'Hạn hoàn thành', type: 'date' },
@@ -55,21 +57,19 @@ export const taskFields = [
     // chỉ task cấp cao nhất mới làm task cha được, và không chọn chính nó
     filter: (t, record) => !t.parent_id && t.id !== record?.id,
   },
-  { name: 'description', label: 'Mô tả', type: 'textarea', rows: 5 },
   {
     name: 'document_ids',
     label: 'Tài liệu liên quan (thiết kế, đặc tả)',
-    type: 'multiref',
-    source: 'documents',
-    groupBy: 'type',
-    groupLabel: 'documentType',
-    emptyText: 'Dự án chưa có tài liệu nào. Thêm tài liệu ở mục "Tài liệu".',
+    type: 'documents',
+    hint: 'Chọn từ các tài liệu của dự án trong mục Tài liệu.',
   },
+  { name: 'description', label: 'Mô tả', type: 'textarea', rows: 5 },
 ];
 
 export const testCaseFields = [
   { name: 'title', label: 'Tên test case', required: true, full: true },
   { name: 'module', label: 'Module / Chức năng', type: 'module' },
+  { name: 'category_id', label: 'Danh mục', type: 'category' },
   {
     name: 'type',
     label: 'Loại test',
@@ -119,6 +119,7 @@ export const bugFields = [
     default: 'new',
   },
   { name: 'environment', label: 'Môi trường', placeholder: 'VD: Chrome 130 / Windows 11 / staging' },
+  { name: 'category_id', label: 'Danh mục', type: 'category' },
   { name: 'assignee', label: 'Người xử lý', type: 'person' },
   { name: 'reporter', label: 'Người báo cáo', type: 'person' },
   { name: 'test_case_id', label: 'Test case liên quan', type: 'ref', source: 'testCases' },
@@ -170,6 +171,7 @@ export const documentFields = [
     default: 'draft',
   },
   { name: 'version', label: 'Phiên bản', placeholder: 'VD: 1.0' },
+  { name: 'category_id', label: 'Danh mục', type: 'category' },
   { name: 'author', label: 'Người soạn', type: 'person' },
   {
     name: 'url',
@@ -186,4 +188,17 @@ export const memberFields = [
   { name: 'position', label: 'Chức danh', placeholder: 'VD: Backend Developer' },
   { name: 'email', label: 'Email', placeholder: 'ten@congty.com' },
   { name: 'phone', label: 'Số điện thoại' },
+];
+
+export const categoryFields = [
+  { name: 'name', label: 'Tên danh mục', required: true },
+  {
+    name: 'parent_id',
+    label: 'Thuộc danh mục (danh mục cha)',
+    type: 'category',
+    excludeSelf: true,
+    emptyLabel: '— Không có (danh mục gốc) —',
+  },
+  { name: 'color', label: 'Màu nhãn', type: 'select', options: CATEGORY_COLORS, required: true, default: 'blue' },
+  { name: 'description', label: 'Mô tả', type: 'textarea', rows: 3 },
 ];

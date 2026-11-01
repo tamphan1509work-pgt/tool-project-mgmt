@@ -1,3 +1,5 @@
+import CategoryBadge from '../components/CategoryBadge.jsx';
+import { categoryFilter } from '../categories.js';
 import { Link } from 'react-router-dom';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import ResourceList from '../components/ResourceList.jsx';
@@ -33,6 +35,7 @@ export function BugList() {
         { name: 'severity', label: 'Mức độ', options: options('bugSeverity') },
         { name: 'priority', label: 'Ưu tiên', options: options('priority') },
         { name: 'assignee', label: 'Người xử lý', source: 'people' },
+        categoryFilter,
         { name: 'open', label: 'Chỉ bug đang mở', type: 'toggle' },
       ]}
       columns={[
@@ -58,6 +61,7 @@ export function BugList() {
           width: 120,
           render: (b) => <Badge kind="bugStatus" value={b.status} />,
         },
+        { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
         {
           key: 'assignee',
           title: 'Người xử lý',
@@ -120,6 +124,7 @@ export function BugDetail() {
             <Section title="Thông tin">
               <InfoList
                 items={[
+                  ['Danh mục', <CategoryBadge key="c" id={b.category_id} full />],
                   ['Người xử lý', b.assignee],
                   ['Người báo cáo', b.reporter],
                   ['Môi trường', b.environment],

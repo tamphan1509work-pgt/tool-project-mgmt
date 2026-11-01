@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS = {
   email_to_assignee: true, // gửi cho người thực hiện task
   email_to_pm: true, // gửi cho PM của dự án
   extra_emails: '', // email nhận thêm, cách nhau dấu phẩy
+  mention_web: true, // thông báo trên web khi được @nhắc tên trong bình luận
+  mention_email: true, // gửi email ngay khi được @nhắc tên (nếu đã cấu hình SMTP)
 };
 
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
@@ -70,10 +72,15 @@ const dayDiff = (a, b) => Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(
  * Các task / milestone chưa xong đã trễ hạn hoặc sắp đến hạn (trong `daysBefore` ngày tới).
  * Bỏ qua dự án đã hoàn thành / huỷ.
  */
-export function deadlineItems(db, { projectId = null, daysBefore = 1, includeMilestones = true, today = localToday() }) {
+export function deadlineItems(
+  db,
+  { projectId = null, projectIds = null, daysBefore = 1, includeMilestones = true, today = localToday() },
+) {
   const limit = new Date(Date.parse(`${today}T00:00:00Z`) + daysBefore * 86400000).toISOString().slice(0, 10);
-  const scope = projectId ? 'AND p.id = ?' : '';
-  const params = projectId ? [limit, projectId] : [limit];
+  // projectIds: chỉ các dự án người xem được phép (null = tất cả)
+  const ids = projectIds ? (projectId ? projectIds.filter((x) => x === projectId) : projectIds) : projectId ? [projectId] : null;
+  const scope = ids ? (ids.length ? `AND p.id IN (${ids.map(() => '?').join(',')})` : 'AND 0') : '';
+  const params = ids ? [limit, ...ids] : [limit];
   const tasks = db
     .prepare(
       `SELECT t.id, t.title, t.assignee, t.due_date, t.status, t.priority, t.project_id, p.code AS project_code, p.name AS project_name

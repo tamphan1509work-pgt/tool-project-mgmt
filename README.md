@@ -20,7 +20,9 @@ Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Menu
 
 Mọi mục (biên bản, task, test case, bug, tài liệu, dự án, thành viên) có nút **Copy link** ở trang chi tiết và trên từng dòng danh sách: người nhận mở link là vào thẳng mục đó (tự chuyển sang đúng dự án). Bản demo dùng link artifact kèm `#tasks-12` (đặt link gốc qua biến `VITE_SHARE_URL` khi build demo).
 
-Cột **Người tạo** và **PIC** hiển thị avatar, rê chuột vào hiện họ tên và email. **Bình luận** (Task, Test report, Bug): thành viên của dự án trao đổi trong tab Bình luận (Ctrl + Enter để gửi), **trả lời** từng bình luận (hiện thành luồng; trả lời một câu trả lời sẽ tự gắn `@tên` người được trả lời; xoá bình luận gốc xoá luôn các trả lời), sửa bình luận của mình, xoá bình luận của mình (quản trị viên xoá được mọi bình luận).
+Cột **Người tạo** và **PIC** hiển thị avatar, rê chuột vào hiện họ tên và email. **Bình luận** (Task, Test report, Bug): thành viên của dự án trao đổi trong tab Bình luận (Ctrl + Enter để gửi), **trả lời** từng bình luận (hiện thành luồng). Gõ **`@`** để chọn thành viên dự án cần **nhắc tên**: người đó nhận thông báo ở mục *Nhắc đến bạn* trong chuông (bấm vào mở thẳng tab Bình luận) và **email** ngay lập tức (nếu đã cấu hình SMTP; bật / tắt trong Cài đặt). Bình luận đã gửi **không sửa / xoá được**.
+
+**Phân quyền:** **Quản trị viên** có toàn quyền. **Thành viên** chỉ thấy các dự án mình được thêm vào (danh sách dự án, chọn dự án, dữ liệu, lịch sử, thông báo đều giới hạn theo dự án — kể cả gọi API trực tiếp); ở màn Dự án chỉ được xem (ẩn nút thêm / sửa / xoá dự án, thêm / gỡ / đổi vai trò thành viên, danh mục, milestone); không thấy menu **Thành viên** (chỉ xem / sửa hồ sơ của chính mình); trong dự án của mình vẫn làm việc với meeting minutes, task, test report, bug, tài liệu như bình thường.
 
 Thời gian hiển thị theo định dạng `dd/mm/yyyy hh:mm:ss`. Người tạo được ghi tự động theo tài khoản đăng nhập. Mọi bảng có cột **STT**; danh sách hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL.
 
@@ -133,10 +135,10 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | GET | `/tasks?counts=status` | Kèm `counts`: số task theo trạng thái (theo các bộ lọc khác, bỏ qua bộ lọc trạng thái) |
 | GET | `/{resource}?category_id=` | Lọc task / test case / bug / tài liệu theo danh mục (gồm danh mục con; `none` = chưa phân loại) |
 | GET | `/history?entity=tasks&entity_id=12` hoặc `?project_id=` | Lịch sử thay đổi của một mục / cả dự án. Người thao tác lấy theo tài khoản đăng nhập |
-| GET / POST | `/comments?entity=tasks&entity_id=12` | Bình luận của task / test case (`test-cases`) / bug; gửi: `{ entity, entity_id, body, parent_id? }` (`parent_id` để trả lời) (thành viên dự án hoặc quản trị viên) |
-| PATCH / DELETE | `/comments/:id` | Sửa (tác giả) / xoá (tác giả hoặc quản trị viên) bình luận |
+| GET / POST | `/comments?entity=tasks&entity_id=12` | Bình luận của task / test case (`test-cases`) / bug; gửi: `{ entity, entity_id, body, parent_id? }` (`parent_id` để trả lời; `@Họ Tên` của thành viên dự án sẽ được thông báo). Bình luận không sửa / xoá được (thành viên dự án hoặc quản trị viên) |
 | GET / PUT | `/settings` | Cài đặt thông báo |
-| GET | `/notifications?project_id=` | Task / milestone trễ hoặc sắp đến hạn (thông báo web) |
+| GET | `/notifications?project_id=` | Task / milestone trễ hoặc sắp đến hạn và các lần được @nhắc tên (`mentions`, `unreadMentions`) |
+| POST | `/notifications/mentions/read` | Đánh dấu đã đọc thông báo @nhắc tên: `{ ids: [..] }` hoặc `{ all: true }` |
 | POST | `/notifications/email/preview` · `/notifications/email/run` | Xem trước / gửi ngay email nhắc deadline |
 | GET | `/auth/status` | `{ needsSetup }`: chưa có tài khoản nào |
 | POST | `/auth/setup` · `/auth/login` | Tạo quản trị viên đầu tiên / đăng nhập `{ email, password, remember }` → `{ token, user }` |

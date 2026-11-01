@@ -104,16 +104,25 @@ function DocumentsNav() {
 /** Các trang theo dự án: cần có ít nhất một dự án */
 function RequireProject({ children }) {
   const { loaded, projectId } = useProject();
+  const { user } = useAuth();
   if (!loaded) return <Loading />;
   if (!projectId) {
-    return (
+    return user?.is_admin ? (
       <Empty>
         Chưa có dự án nào. <Link to="/projects">Tạo dự án đầu tiên</Link> để bắt đầu quản lý meeting minutes, task, test
         report, bug và tài liệu.
       </Empty>
+    ) : (
+      <Empty>Bạn chưa được thêm vào dự án nào. Hãy liên hệ quản trị viên để được thêm vào dự án.</Empty>
     );
   }
   return children;
+}
+
+/** Trang chỉ dành cho quản trị viên (VD: danh sách thành viên) */
+function RequireAdmin({ children }) {
+  const { user } = useAuth();
+  return user?.is_admin ? children : <Navigate replace to="/" />;
 }
 
 /** Chỉ hiện ứng dụng khi đã đăng nhập; giữ nguyên đường dẫn để sau khi đăng nhập vào đúng trang */
@@ -181,6 +190,7 @@ const readCollapsed = () => {
 
 function Layout({ children, onReset }) {
   const { pathname } = useLocation();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   // Thu gọn / mở rộng menu trái (máy tính); ghi nhớ trên trình duyệt
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -213,9 +223,11 @@ function Layout({ children, onReset }) {
           <NavLink to="/projects" className="nav-link" title="Dự án">
             <Icon name="folder" /> <span className="nav-label">Dự án</span>
           </NavLink>
-          <NavLink to="/members" className="nav-link" title="Thành viên">
-            <Icon name="people" /> <span className="nav-label">Thành viên</span>
-          </NavLink>
+          {user?.is_admin && (
+            <NavLink to="/members" className="nav-link" title="Thành viên">
+              <Icon name="people" /> <span className="nav-label">Thành viên</span>
+            </NavLink>
+          )}
           <ProjectSwitcher collapsed={collapsed} />
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav-link" title={n.label}>
@@ -286,7 +298,14 @@ export default function App() {
                   <Routes>
                     <Route path="/projects" element={<ProjectList />} />
                     <Route path="/projects/:id" element={<ProjectDetail />} />
-                    <Route path="/members" element={<MemberList />} />
+                    <Route
+                      path="/members"
+                      element={
+                        <RequireAdmin>
+                          <MemberList />
+                        </RequireAdmin>
+                      }
+                    />
                     <Route path="/members/:id" element={<MemberDetail />} />
                     <Route
                       path="/categories"

@@ -27,6 +27,7 @@ const TABLES = [
   'tasks',
   'meetings',
   'documents',
+  'mentions',
   'comments',
   'sessions',
   'accounts',
@@ -621,7 +622,23 @@ export function seed(db, { reset = false } = {}) {
     comment('tasks', t3, 'Vũ Ngọc Lan', 'Màn hình OTP đang chờ API của Huy merge xong.', -1, '03:00:00');
     comment('bugs', 1, 'Phạm Thu Dung', 'Đã tái hiện được trên Chrome và Safari, đính kèm video ở lần chạy test.', -2, '04:00:00');
     const cb = db.prepare("SELECT id FROM comments WHERE entity = 'bugs' AND entity_id = 1").get().id;
-    comment('bugs', 1, 'Vũ Ngọc Lan', 'Em đã tìm ra nguyên nhân: bộ đếm sai bị reset khi gửi lại OTP. Đang sửa.', -1, '07:20:00', cb);
+    const cl = comment('bugs', 1, 'Vũ Ngọc Lan', '@Nguyễn Văn An em đã tìm ra nguyên nhân: bộ đếm sai bị reset khi gửi lại OTP. Đang sửa.', -1, '07:20:00', cb);
+    const cr = db.prepare("SELECT id FROM comments WHERE body LIKE '@Hoàng Gia Huy Ok em%'").get().id;
+    // Thông báo @nhắc tên tương ứng (An chưa đọc, Huy đã đọc)
+    const mention = (memberName, commentId, entity, entityId, actor, body, offset, time, read) =>
+      insert('mentions', {
+        member_id: people[memberName],
+        project_id: pay,
+        comment_id: commentId,
+        entity,
+        entity_id: entityId,
+        actor,
+        excerpt: body,
+        created_at: `${day(offset)} ${time}`,
+        read_at: read ? `${day(offset)} ${time}` : null,
+      });
+    mention('Nguyễn Văn An', cl, 'bugs', 1, 'Vũ Ngọc Lan', '@Nguyễn Văn An em đã tìm ra nguyên nhân: bộ đếm sai bị reset khi gửi lại OTP. Đang sửa.', -1, '07:20:00', false);
+    mention('Hoàng Gia Huy', cr, 'tasks', t2, 'Nguyễn Văn An', '@Hoàng Gia Huy Ok em, có sandbox thì báo anh nhé.', -3, '03:05:00', true);
 
     // ---------- File đính kèm của tài liệu ----------
     const docFile = (document_id, name, mime_type, text) => {

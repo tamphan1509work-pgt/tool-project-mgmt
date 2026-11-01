@@ -250,6 +250,30 @@ export function createResource(db, cfg) {
     }
   };
 
+  // ---- Phân quyền ----
+  // Thành viên (không phải quản trị viên) chỉ thấy dữ liệu của các dự án mình tham gia.
+  // req.user.allowedProjects: null = quản trị viên (không giới hạn), mảng = các dự án được phép.
+  // cfg.scopeColumn: cột chứa ID dự án ('project_id' mặc định, 'id' cho bảng projects)
+  // cfg.adminWrite: chỉ quản trị viên được thêm / sửa / xoá
+  // cfg.authorize(req, action, row): kiểm tra riêng (action: list | read | create | update | delete)
+  const scopeCol = cfg.scopeColumn ?? (cfg.fields.project_id ? 'project_id' : null);
+  const allowedOf = (req) => req.user?.allowedProjects ?? null;
+  const forbid = (msg = 'Bạn không có quyền truy cập mục này') => new HttpError(403, msg);
+  const restrict = (req, where, params) => {
+    const ids = allowedOf(req);
+    if (!ids || !scopeCol) return;
+    where.push(ids.length ? `${scopeCol} IN (${ids.map(() => '?').join(',')})` : '0');
+    params.push(...ids);
+  };
+  const authorize = (req, action, row) => {
+    cfg.authorize?.(req, action, row);
+    if (cfg.adminWrite && action !== 'list' && action !== 'read' && !req.user?.is_admin) {
+      throw forbid('Chỉ quản trị viên mới thực hiện được thao tác này');
+    }
+    const ids = allowedOf(req);
+    if (ids && scopeCol && row && !ids.includes(row[scopeCol])) throw forbid();
+  };
+
   const getRow = (id) => db.prepare(`${select} WHERE id = ?`).get(id);
   const mustGet = (id) => {
     const row = getRow(id);
@@ -303,7 +327,9 @@ export function createResource(db, cfg) {
   };
 
   router.get('/', (req, res) => {
+    authorize(req, 'list', null);
     const { where, params } = buildWhere(req.query);
+    restrict(req, where, params);
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const sortKey = Object.hasOwn(cfg.sortable, req.query.sort) ? req.query.sort : cfg.defaultSort;
     const order =
@@ -323,6 +349,7 @@ export function createResource(db, cfg) {
     let counts;
     if (cfg.countBy && req.query.counts === cfg.countBy) {
       const c = buildWhere({ ...req.query, [cfg.countBy]: '' });
+      restrict(req, c.where, c.params);
       const cw = c.where.length ? `WHERE ${c.where.join(' AND ')}` : '';
       counts = Object.fromEntries(
         db
@@ -336,11 +363,14 @@ export function createResource(db, cfg) {
 
   router.get('/:id', (req, res) => {
     const row = mustGet(parseId(req.params.id));
+    authorize(req, 'read', row);
     res.json(cfg.expand ? { ...row, ...cfg.expand(db, row) } : row);
   });
 
   router.post('/', (req, res) => {
+    authorize(req, 'create', null);
     const data = validate(db, cfg.fields, req.body);
+    if (scopeCol === 'project_id') authorize(req, 'create', data);
     if (cfg.trackCreator) data.created_by = req.user?.name ?? null;
     cfg.beforeSave?.(data, null, db, req);
     checkSameProject(data, null);
@@ -364,6 +394,7 @@ export function createResource(db, cfg) {
   const update = (req, res) => {
     const id = parseId(req.params.id);
     const existing = mustGet(id);
+    authorize(req, 'update', existing);
     const data = validate(db, cfg.fields, req.body, { partial: true });
     cfg.beforeSave?.(data, existing, db, req);
     checkSameProject(data, existing);
@@ -392,12 +423,16 @@ export function createResource(db, cfg) {
   router.delete('/:id', (req, res) => {
     const id = parseId(req.params.id);
     const row = mustGet(id);
+    authorize(req, 'delete', row);
     cfg.beforeDelete?.(db, row, req);
     transaction(db, () => {
       // Xoá dự án thì lịch sử của dự án cũng bị xoá theo (FK), nên không ghi thêm
       if (table !== 'projects') log(req, row, 'delete', { summary: `Xoá ${cfg.label} "${nameOf(row)}"` });
       db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
-      if (cfg.commentable) db.prepare('DELETE FROM comments WHERE entity = ? AND entity_id = ?').run(entity, id);
+      if (cfg.commentable) {
+        db.prepare('DELETE FROM mentions WHERE entity = ? AND entity_id = ?').run(entity, id);
+        db.prepare('DELETE FROM comments WHERE entity = ? AND entity_id = ?').run(entity, id);
+      }
     });
     res.status(204).end();
   });

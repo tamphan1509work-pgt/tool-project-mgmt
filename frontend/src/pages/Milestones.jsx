@@ -6,6 +6,7 @@ import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import EntityForm from '../components/EntityForm.jsx';
 import { Badge, Empty, ErrorBox, Icon, Loading, Modal, Prose } from '../components/ui.jsx';
 import { code, fmtDate, fmtDateTime, isOverdue, todayStr, isClosed } from '../constants.js';
+import { useAuth } from '../auth.jsx';
 import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
 import { milestoneFields } from '../forms.js';
 
@@ -37,6 +38,7 @@ export function MilestoneDue({ m }) {
 
 /** Tab "Milestone" trong chi tiết dự án */
 export function MilestoneList({ project }) {
+  const isAdmin = Boolean(useAuth().user?.is_admin);
   const toast = useToast();
   const confirm = useConfirm();
   const { refreshLookup } = useLookup();
@@ -79,9 +81,11 @@ export function MilestoneList({ project }) {
           Milestone là các mốc quan trọng của dự án. Gắn task vào milestone để theo dõi tiến độ.
         </p>
         <div className="spacer" />
-        <button className="btn btn-primary" onClick={() => setEditing({})}>
-          <Icon name="plus" /> Thêm milestone
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={() => setEditing({})}>
+            <Icon name="plus" /> Thêm milestone
+          </button>
+        )}
       </div>
       <ErrorBox error={error} onRetry={reload} />
       {loading && !data ? (
@@ -127,12 +131,16 @@ export function MilestoneList({ project }) {
                   </td>
                   <td className="row-actions">
                     <CopyLinkButton compact resource="milestones" id={m.id} label={code('milestones', m.id)} />
-                    <button className="icon-btn" title="Sửa" onClick={() => setEditing(m)}>
-                      <Icon name="edit" size={16} />
-                    </button>
-                    <button className="icon-btn danger" title="Xoá" onClick={() => remove(m)}>
-                      <Icon name="trash" size={16} />
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button className="icon-btn" title="Sửa" onClick={() => setEditing(m)}>
+                          <Icon name="edit" size={16} />
+                        </button>
+                        <button className="icon-btn danger" title="Xoá" onClick={() => remove(m)}>
+                          <Icon name="trash" size={16} />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -160,8 +168,10 @@ export function MilestoneList({ project }) {
 }
 
 export function MilestoneDetail() {
+  const isAdmin = Boolean(useAuth().user?.is_admin);
   return (
     <DetailPage
+      readOnly={!isAdmin}
       resource="milestones"
       backLabel="Các milestone của dự án"
       backTo={(m) => `/projects/${m.project_id}?tab=milestones`}

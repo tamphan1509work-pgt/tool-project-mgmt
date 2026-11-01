@@ -77,9 +77,14 @@ export function diffChanges(db, fields, before, after, linksBefore = {}, linksAf
 }
 
 /** Danh sách lịch sử: theo một mục (entity + entity_id) hoặc toàn bộ dự án */
-export function listHistory(db, { entity, entityId, projectId, limit = 100, offset = 0 }) {
+export function listHistory(db, { entity, entityId, projectId, projectIds = null, limit = 100, offset = 0 }) {
   const where = [];
   const params = [];
+  // Thành viên chỉ xem lịch sử của các dự án mình tham gia (projectIds = null: không giới hạn)
+  if (projectIds) {
+    where.push(projectIds.length ? `project_id IN (${projectIds.map(() => '?').join(',')})` : '0');
+    params.push(...projectIds);
+  }
   if (entity) {
     where.push('entity = ?');
     params.push(entity);

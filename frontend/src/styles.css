@@ -909,3 +909,35 @@ input:focus, select:focus, textarea:focus {
 
 /* Tài liệu: link ngoài và số file */
 .doc-sources { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* @nhắc tên */
+.mention-input { position: relative; }
+.mention-input textarea { width: 100%; }
+.mention-menu {
+  position: absolute; left: 0; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none;
+  min-width: 260px; max-width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+}
+.mention-menu li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; cursor: pointer; }
+.mention-menu li.active { background: var(--primary-soft); }
+.mention-menu .mention-name { font-weight: 600; }
+.mention-menu .small { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention.is-me { background: var(--primary-soft); border-radius: 4px; padding: 0 2px; }
+.comment-composer .comment-edit-actions { align-items: center; }
+.comment-hint { margin-right: auto; }
+
+/* Chuông: tab Nhắc đến bạn / Deadline */
+.bell-tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
+.bell-tabs button {
+  border: 0; background: none; padding: 8px 10px; font: inherit; font-size: 13.5px; color: var(--muted);
+  border-bottom: 2px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.bell-tabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.mention-list li { border-left-color: transparent; }
+.mention-list li.is-unread { border-left-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 55%, transparent); }
+.mention-list button {
+  display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 12px; border: 0; background: none;
+  text-align: left; font: inherit; color: var(--text); cursor: pointer;
+}
+.mention-list button:hover { background: var(--surface-2); }
+.mention-excerpt { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

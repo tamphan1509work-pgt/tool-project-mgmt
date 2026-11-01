@@ -506,10 +506,14 @@ function AccountSection({ member, reload }) {
 
 export function MemberDetail() {
   const { refreshLookup } = useLookup();
+  const isAdmin = Boolean(useAuth().user?.is_admin);
   return (
     <DetailPage
       resource="members"
-      backLabel="Danh sách thành viên"
+      // Thành viên chỉ xem / sửa hồ sơ của mình, không vào được danh sách thành viên
+      canDelete={isAdmin}
+      backTo={isAdmin ? undefined : '/'}
+      backLabel={isAdmin ? 'Danh sách thành viên' : 'Trang chủ'}
       formFields={memberFields}
       scoped={false}
       nameOf={(m) => m.name}

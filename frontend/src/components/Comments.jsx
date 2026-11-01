@@ -2,92 +2,55 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { fmtDateTime } from '../constants.js';
-import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
+import { useAsync, useLookup, useToast } from '../context.jsx';
 import { Avatar } from './Avatar.jsx';
+import MentionTextarea from './MentionTextarea.jsx';
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Bình luận giữa các thành viên dự án trên một task / test case / bug.
  * entity: 'tasks' | 'test-cases' | 'bugs'
+ * Bình luận không sửa / xoá được; có thể trả lời và @nhắc tên thành viên (người đó nhận thông báo).
  */
 export default function Comments({ entity, id, onChanged }) {
   const { user } = useAuth();
   const { lookup } = useLookup();
   const toast = useToast();
-  const confirm = useConfirm();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState(null); // { id, body }
   const [replyTo, setReplyTo] = useState(null); // { rootId, name, body }
   const { data, error, reload } = useAsync(() => api.comments({ entity, entity_id: id }), [entity, id]);
-  const canComment = user?.is_admin || lookup.members.some((m) => m.id === user?.id);
+  const people = lookup.members;
+  const canComment = user?.is_admin || people.some((m) => m.id === user?.id);
 
-  const changed = () => {
-    reload();
-    onChanged?.();
+  const post = async (body, parentId) => {
+    setBusy(true);
+    try {
+      const c = await api.addComment({ entity, entity_id: id, body, parent_id: parentId ?? undefined });
+      if (c.mentioned?.length) toast(`Đã gửi thông báo cho ${c.mentioned.map((m) => m.name).join(', ')}`);
+      reload();
+      onChanged?.();
+      return true;
+    } catch (err) {
+      toast(Object.values(err.details ?? {})[0] ?? err.message, 'error');
+      return false;
+    } finally {
+      setBusy(false);
+    }
   };
 
   const send = async () => {
-    if (!draft.trim()) return;
-    setBusy(true);
-    try {
-      await api.addComment({ entity, entity_id: id, body: draft });
-      setDraft('');
-      changed();
-    } catch (err) {
-      toast(Object.values(err.details ?? {})[0] ?? err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
+    if (draft.trim() && (await post(draft))) setDraft('');
   };
-
-  const saveEdit = async () => {
-    try {
-      await api.updateComment(editing.id, { body: editing.body });
-      setEditing(null);
-      reload();
-    } catch (err) {
-      toast(Object.values(err.details ?? {})[0] ?? err.message, 'error');
-    }
-  };
-
-  const remove = async (c) => {
-    const replies = (data ?? []).filter((x) => x.parent_id === c.id).length;
-    const msg = replies ? `Xoá bình luận này và ${replies} trả lời?` : 'Xoá bình luận này?';
-    if (!(await confirm(msg))) return;
-    try {
-      await api.removeComment(c.id);
-      changed();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+  const sendReply = async () => {
+    if (replyTo?.body.trim() && (await post(replyTo.body, replyTo.rootId))) setReplyTo(null);
   };
 
   const startReply = (c) => {
-    const rootId = c.parent_id ?? c.id;
-    // Trả lời một câu trả lời của người khác: gắn sẵn @tên để rõ đang trả lời ai
-    const mention = c.parent_id && c.member_id !== user?.id ? `@${c.author_name} ` : '';
-    setReplyTo({ rootId, name: c.author_name, body: mention });
-  };
-
-  const sendReply = async () => {
-    if (!replyTo?.body.trim()) return;
-    setBusy(true);
-    try {
-      await api.addComment({ entity, entity_id: id, body: replyTo.body, parent_id: replyTo.rootId });
-      setReplyTo(null);
-      changed();
-    } catch (err) {
-      toast(Object.values(err.details ?? {})[0] ?? err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onKey = (e, submit) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      submit();
-    }
+    // Trả lời người khác: gắn sẵn @tên để người đó nhận được thông báo
+    const mention = c.member_id !== user?.id && people.some((p) => p.id === c.member_id) ? `@${c.author_name} ` : '';
+    setReplyTo({ rootId: c.parent_id ?? c.id, name: c.author_name, body: mention });
   };
 
   const ids = new Set((data ?? []).map((c) => c.id));
@@ -95,73 +58,45 @@ export default function Comments({ entity, id, onChanged }) {
   const roots = (data ?? []).filter((c) => !c.parent_id || !ids.has(c.parent_id));
   const repliesOf = (rootId) => (data ?? []).filter((c) => c.parent_id === rootId);
 
-  const renderBody = (text) => {
-    const name = lookup.allMembers.find((m) => text.startsWith(`@${m.name}`))?.name;
-    if (!name) return text;
-    return (
-      <>
-        <span className="mention">@{name}</span>
-        {text.slice(name.length + 1)}
-      </>
-    );
-  };
-
-  const renderComment = (c, isReply) => {
-    const mine = c.member_id === user?.id;
-    return (
-      <div className={`comment ${mine ? 'is-mine' : ''} ${isReply ? 'is-reply' : ''}`}>
-        <Avatar name={c.author_name} src={c.author_avatar} size={isReply ? 28 : 34} />
-        <div className="comment-main">
-          <div className="comment-head">
-            <strong title={c.author_email ?? ''}>{c.author_name}</strong>
-            <span className="muted small">
-              {fmtDateTime(c.created_at)}
-              {c.updated_at && ` · đã sửa ${fmtDateTime(c.updated_at)}`}
+  // Tô màu các "@Tên" của thành viên (tên dài khớp trước)
+  const names = [...new Set(lookup.allMembers.map((m) => m.name))].sort((a, b) => b.length - a.length);
+  const mentionRe = names.length ? new RegExp(`(@(?:${names.map(escapeRe).join('|')}))`, 'g') : null;
+  const renderBody = (text) =>
+    mentionRe
+      ? text.split(mentionRe).map((part, i) =>
+          i % 2 === 1 ? (
+            <span key={i} className={`mention ${part === `@${user?.name}` ? 'is-me' : ''}`}>
+              {part}
             </span>
-            <span className="comment-actions">
-              {canComment && (
-                <button className="btn btn-ghost btn-sm" onClick={() => startReply(c)}>
-                  Trả lời
-                </button>
-              )}
-              {mine && editing?.id !== c.id && (
-                <button className="btn btn-ghost btn-sm" onClick={() => setEditing({ id: c.id, body: c.body })}>
-                  Sửa
-                </button>
-              )}
-              {(mine || user?.is_admin) && (
-                <button className="btn btn-ghost btn-sm text-danger" onClick={() => remove(c)}>
-                  Xoá
-                </button>
-              )}
-            </span>
-          </div>
-          {editing?.id === c.id ? (
-            <div className="comment-edit">
-              <textarea
-                rows={3}
-                aria-label="Sửa bình luận"
-                value={editing.body}
-                autoFocus
-                onChange={(e) => setEditing({ ...editing, body: e.target.value })}
-                onKeyDown={(e) => onKey(e, saveEdit)}
-              />
-              <div className="comment-edit-actions">
-                <button className="btn btn-sm" onClick={() => setEditing(null)}>
-                  Huỷ
-                </button>
-                <button className="btn btn-sm btn-primary" onClick={saveEdit} disabled={!editing.body.trim()}>
-                  Lưu
-                </button>
-              </div>
-            </div>
           ) : (
-            <div className="comment-body">{renderBody(c.body)}</div>
+            part
+          ),
+        )
+      : text;
+
+  const composer = (props) => (
+    <MentionTextarea people={people} excludeId={user?.id} {...props} />
+  );
+
+  const renderComment = (c, isReply) => (
+    <div className={`comment ${c.member_id === user?.id ? 'is-mine' : ''} ${isReply ? 'is-reply' : ''}`}>
+      <Avatar name={c.author_name} src={c.author_avatar} size={isReply ? 28 : 34} />
+      <div className="comment-main">
+        <div className="comment-head">
+          <strong title={c.author_email ?? ''}>{c.author_name}</strong>
+          <span className="muted small">{fmtDateTime(c.created_at)}</span>
+          {canComment && (
+            <span className="comment-actions">
+              <button className="btn btn-ghost btn-sm" onClick={() => startReply(c)}>
+                Trả lời
+              </button>
+            </span>
           )}
         </div>
+        <div className="comment-body">{renderBody(c.body)}</div>
       </div>
-    );
-  };
+    </div>
+  );
 
   return (
     <section className="card section comments">
@@ -190,19 +125,17 @@ export default function Comments({ entity, id, onChanged }) {
                           <div className="muted small">
                             Trả lời <strong>{replyTo.name}</strong>
                           </div>
-                          <textarea
-                            rows={2}
-                            autoFocus
-                            aria-label={`Trả lời ${replyTo.name}`}
-                            placeholder="Viết trả lời… (Ctrl + Enter để gửi)"
-                            value={replyTo.body}
-                            onChange={(e) => setReplyTo({ ...replyTo, body: e.target.value })}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') setReplyTo(null);
-                              onKey(e, sendReply);
-                            }}
-                            onFocus={(e) => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
-                          />
+                          {composer({
+                            rows: 2,
+                            autoFocus: true,
+                            'aria-label': `Trả lời ${replyTo.name}`,
+                            placeholder: 'Viết trả lời… (@ để nhắc tên, Ctrl + Enter để gửi)',
+                            value: replyTo.body,
+                            onChange: (body) => setReplyTo((r) => ({ ...r, body })),
+                            onSubmit: sendReply,
+                            onCancel: () => setReplyTo(null),
+                            onFocus: (e) => e.target.setSelectionRange(e.target.value.length, e.target.value.length),
+                          })}
                           <div className="comment-edit-actions">
                             <button className="btn btn-sm" onClick={() => setReplyTo(null)}>
                               Huỷ
@@ -229,15 +162,18 @@ export default function Comments({ entity, id, onChanged }) {
         <div className="comment-composer">
           <Avatar name={user?.name} src={user?.avatar} size={34} />
           <div className="comment-composer-main">
-            <textarea
-              rows={3}
-              placeholder="Viết bình luận… (Ctrl + Enter để gửi)"
-              aria-label="Viết bình luận"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => onKey(e, send)}
-            />
+            {composer({
+              rows: 3,
+              placeholder: 'Viết bình luận… Gõ @ để nhắc tên thành viên (Ctrl + Enter để gửi)',
+              'aria-label': 'Viết bình luận',
+              value: draft,
+              onChange: setDraft,
+              onSubmit: send,
+            })}
             <div className="comment-edit-actions">
+              <span className="muted small comment-hint">
+                Người được @nhắc tên sẽ nhận thông báo trên web và qua email. Bình luận đã gửi không sửa / xoá được.
+              </span>
               <button className="btn btn-primary" onClick={send} disabled={busy || !draft.trim()}>
                 Gửi bình luận
               </button>

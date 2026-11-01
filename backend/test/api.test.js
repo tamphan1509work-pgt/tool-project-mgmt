@@ -710,7 +710,9 @@ describe('settings & deadline notifications', () => {
     assert.ok(r.body.details.remind_days_before && r.body.details.extra_emails && r.body.details.email_hour);
     r = await req('PUT', '/settings', { web_enabled: false, extra_emails: 'boss@x.com;  qa@x.com' });
     assert.equal(r.body.settings.extra_emails, 'boss@x.com, qa@x.com');
-    assert.deepEqual((await req('GET', '/notifications')).body, { enabled: false, items: [] });
+    r = (await req('GET', '/notifications')).body;
+    assert.equal(r.deadlineEnabled, false);
+    assert.deepEqual(r.items, []);
     r = await req('GET', '/history?entity=settings');
     assert.ok(r.body.items[0].changes.some((c) => c.field === 'web_enabled'));
     await req('PUT', '/settings', { web_enabled: true, extra_emails: '' });
@@ -819,7 +821,8 @@ describe('auth', () => {
     assert.equal((await req('PUT', `/members/${huy.id}/account`, { disabled: true }, lan.token)).status, 403);
     assert.equal((await req('PUT', '/settings', { web_enabled: true }, lan.token)).status, 403);
     assert.equal((await req('PATCH', `/members/${an.id}`, { email: 'hack@x.vn' }, lan.token)).status, 403);
-    assert.equal((await req('PATCH', `/members/${huy.id}`, { position: 'Dev' }, lan.token)).status, 200);
+    assert.equal((await req('PATCH', `/members/${huy.id}`, { position: 'Dev' }, lan.token)).status, 403, 'không sửa hồ sơ người khác');
+    assert.equal((await req('PATCH', `/members/${lan.user.id}`, { position: 'Dev' }, lan.token)).status, 200, 'sửa hồ sơ của mình');
 
     // quản trị viên: khoá, mở khoá, cấp quyền, đặt mật khẩu, tạo tài khoản mới
     assert.equal((await req('PUT', `/members/${huy.id}/account`, { disabled: true })).status, 200);
@@ -942,16 +945,15 @@ describe('comments, avatar, status chips', () => {
     assert.equal((await req('POST', '/comments', { entity: 'meetings', entity_id: 1, body: 'x' }, binh)).status, 400);
     assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'Admin góp ý' })).status, 201, 'quản trị viên');
 
-    r = await req('GET', `/comments?entity=tasks&entity_id=${t.id}`, undefined, tam);
+    assert.equal((await req('GET', `/comments?entity=tasks&entity_id=${t.id}`, undefined, tam)).status, 403, 'ngoài dự án không xem được');
+    r = await req('GET', `/comments?entity=tasks&entity_id=${t.id}`, undefined, binh);
     assert.equal(r.body.length, 2);
     assert.equal((await req('GET', `/tasks/${t.id}`)).body.comment_count, 2);
 
-    assert.equal((await req('PATCH', `/comments/${cid}`, { body: 'sửa bậy' })).status, 403, 'admin không sửa được của người khác');
-    r = await req('PATCH', `/comments/${cid}`, { body: 'Đã sửa' }, binh);
-    assert.equal(r.body.body, 'Đã sửa');
-    assert.ok(r.body.updated_at);
-    assert.equal((await req('DELETE', `/comments/${cid}`, undefined, tam)).status, 403);
-    assert.equal((await req('DELETE', `/comments/${cid}`)).status, 204, 'quản trị viên xoá được');
+    // Bình luận không sửa / xoá được, kể cả người viết hay quản trị viên
+    assert.equal((await req('PATCH', `/comments/${cid}`, { body: 'Đã sửa' }, binh)).status, 404);
+    assert.equal((await req('DELETE', `/comments/${cid}`, undefined, binh)).status, 404);
+    assert.equal((await req('DELETE', `/comments/${cid}`)).status, 404);
 
     await req('DELETE', `/tasks/${t.id}`);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comments WHERE entity = 'tasks' AND entity_id = ?").get(t.id).n, 0);
@@ -977,7 +979,7 @@ describe('comments, avatar, status chips', () => {
 });
 
 describe('comment replies & document attachments', () => {
-  test('trả lời bình luận gắn vào bình luận gốc; xoá gốc xoá luôn trả lời', async () => {
+  test('trả lời bình luận gắn vào bình luận gốc', async () => {
     const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
     const t = (await req('POST', '/tasks', { project_id: pay, title: 'Có trả lời' })).body;
     const other = (await req('POST', '/tasks', { project_id: pay, title: 'Task khác' })).body;
@@ -992,8 +994,8 @@ describe('comment replies & document attachments', () => {
     assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: other.id, body: 'x', parent_id: root.id })).status, 400);
     assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'x', parent_id: 999999 })).status, 400);
     assert.equal((await req('GET', `/comments?entity=tasks&entity_id=${t.id}`)).body.length, 3);
-    assert.equal((await req('DELETE', `/comments/${root.id}`)).status, 204);
-    assert.equal((await req('GET', `/comments?entity=tasks&entity_id=${t.id}`)).body.length, 0);
+    await req('DELETE', `/tasks/${t.id}`);
+    assert.equal((await req('GET', `/comments?entity=tasks&entity_id=${t.id}`)).status, 404);
   });
 
   test('tài liệu: không còn người soạn, có link ngoài hoặc file đính kèm', async () => {
@@ -1034,5 +1036,106 @@ describe('comment replies & document attachments', () => {
     assert.equal(row.document_id, null);
     db2.close();
     rmSync(dirname(file), { recursive: true, force: true });
+  });
+});
+
+describe('phân quyền thành viên & @nhắc tên', () => {
+  const projectId = async (code) => (await req('GET', `/projects?q=${code}`)).body.items.find((p) => p.code === code).id;
+  const loginAs = async (email) => (await req('POST', '/auth/login', { email, password: '123456' }, null)).body.token;
+
+  test('thành viên chỉ thấy dự án của mình, chỉ quản trị viên quản lý dự án / thành viên', async () => {
+    const pay = await projectId('PAY');
+    const crm = await projectId('CRM');
+    const m = (await req('POST', '/members', { name: 'Chỉ CRM', email: 'only.crm@x.vn' })).body;
+    await req('PUT', `/members/${m.id}/account`, { password: '123456' });
+    await req('POST', `/projects/${crm}/members`, { member_id: m.id, role: 'developer' });
+    const tok = await loginAs('only.crm@x.vn');
+
+    let r = await req('GET', '/projects', undefined, tok);
+    assert.deepEqual(r.body.items.map((p) => p.code), ['CRM']);
+    assert.equal((await req('GET', `/projects/${pay}`, undefined, tok)).status, 403);
+    assert.deepEqual((await req('GET', '/lookup', undefined, tok)).body.projects.map((p) => p.code), ['CRM']);
+    assert.equal((await req('GET', `/lookup?project_id=${pay}`, undefined, tok)).status, 403);
+    assert.equal((await req('GET', `/dashboard?project_id=${pay}`, undefined, tok)).status, 403);
+    assert.equal((await req('GET', `/tasks?project_id=${pay}`, undefined, tok)).body.total, 0);
+    r = await req('GET', '/tasks?limit=500', undefined, tok);
+    assert.ok(r.body.items.length > 0 && r.body.items.every((t) => t.project_id === crm), 'không lọc dự án: chỉ thấy CRM');
+    const payTask = (await req('GET', `/tasks?project_id=${pay}&limit=1`)).body.items[0];
+    assert.equal((await req('GET', `/tasks/${payTask.id}`, undefined, tok)).status, 403);
+    assert.equal((await req('PATCH', `/tasks/${payTask.id}`, { title: 'hack' }, tok)).status, 403);
+    assert.equal((await req('POST', '/tasks', { project_id: pay, title: 'x' }, tok)).status, 403);
+    assert.equal((await req('GET', `/history?project_id=${pay}`, undefined, tok)).body.total, 0);
+    // Trong dự án của mình vẫn làm việc bình thường
+    assert.equal((await req('POST', '/tasks', { project_id: crm, title: 'Task của tôi' }, tok)).status, 201);
+    // Chỉ quản trị viên: dự án, thành viên dự án, danh mục, milestone, danh sách thành viên, Gantt
+    assert.equal((await req('POST', '/projects', { code: 'NEWX', name: 'X' }, tok)).status, 403);
+    assert.equal((await req('PATCH', `/projects/${crm}`, { name: 'Đổi tên' }, tok)).status, 403);
+    assert.equal((await req('POST', `/projects/${crm}/members`, { name: 'Ai đó' }, tok)).status, 403);
+    assert.equal((await req('POST', '/categories', { project_id: crm, name: 'C' }, tok)).status, 403);
+    assert.equal((await req('POST', '/milestones', { project_id: crm, name: 'M', due_date: '2026-12-01' }, tok)).status, 403);
+    assert.equal((await req('GET', '/categories?project_id=' + crm, undefined, tok)).status, 200, 'vẫn xem được');
+    assert.equal((await req('GET', '/members', undefined, tok)).status, 403);
+    assert.equal((await req('GET', `/members/${m.id}`, undefined, tok)).status, 200, 'xem hồ sơ của mình');
+    assert.equal((await req('GET', '/gantt', undefined, tok)).status, 403);
+    const names = (await req('GET', '/lookup', undefined, tok)).body.allMembers.map((x) => x.name);
+    assert.ok(names.includes('Chỉ CRM') && !names.includes('Hoàng Gia Huy'), 'chỉ thấy người cùng dự án');
+  });
+
+  test('@nhắc tên tạo thông báo web và gửi email', async () => {
+    const sent = [];
+    const mailer = { from: 'x', send: async (m) => sent.push(m) };
+    const app2 = createApp(db, { mailer, appUrl: 'https://pm.example.com' });
+    const server = app2.listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const base = `http://127.0.0.1:${server.address().port}/api`;
+    const call2 = async (method, path, body, token) => {
+      const res = await fetch(base + path, {
+        method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return { status: res.status, body: res.status === 204 ? null : await res.json() };
+    };
+    try {
+      const pay = await projectId('PAY');
+      const t = (await req('POST', '/tasks', { project_id: pay, title: 'Nhắc tên' })).body;
+      const binh = await loginAs('binh.tran@example.com');
+      const chau = await loginAs('chau.le@example.com');
+      assert.ok(chau);
+      const r = await call2(
+        'POST',
+        '/comments',
+        { entity: 'tasks', entity_id: t.id, body: '@Lê Minh Châu và @Phạm Thu Dung xem giúp. @Trần Thị Bình tự nhắc. @Lê Minh Châux' },
+        binh,
+      );
+      assert.equal(r.status, 201);
+      assert.deepEqual(r.body.mentioned.map((x) => x.name).sort(), ['Lê Minh Châu', 'Phạm Thu Dung']);
+      await new Promise((res) => setTimeout(res, 20));
+      assert.deepEqual(sent.map((m) => m.to).sort(), ['chau.le@example.com', 'dung.pham@example.com']);
+      assert.match(sent[0].subject, /Trần Thị Bình đã nhắc đến bạn trong TASK-/);
+      assert.match(sent[0].text, /https:\/\/pm\.example\.com\/tasks\/\d+\?tab=comments/);
+
+      let n = (await req('GET', '/notifications', undefined, chau)).body;
+      assert.equal(n.unreadMentions, 1);
+      assert.equal(n.mentions[0].actor, 'Trần Thị Bình');
+      assert.equal(n.mentions[0].entity_id, t.id);
+      await req('POST', '/notifications/mentions/read', { ids: [n.mentions[0].id] }, chau);
+      n = (await req('GET', '/notifications', undefined, chau)).body;
+      assert.equal(n.unreadMentions, 0);
+      assert.equal((await req('GET', '/notifications', undefined, binh)).body.mentions.length, 0, 'không tự thông báo cho mình');
+
+      // Tắt email @nhắc tên trong cài đặt
+      await req('PUT', '/settings', { mention_email: false });
+      sent.length = 0;
+      await call2('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: '@Lê Minh Châu lần 2' }, binh);
+      await new Promise((res) => setTimeout(res, 20));
+      assert.equal(sent.length, 0);
+      assert.equal((await req('GET', '/notifications', undefined, chau)).body.unreadMentions, 1, 'vẫn có thông báo web');
+      await req('PUT', '/settings', { mention_email: true });
+      await req('DELETE', `/tasks/${t.id}`);
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM mentions WHERE entity_id = ? AND entity = ?').get(t.id, 'tasks').n, 0);
+    } finally {
+      server.close();
+    }
   });
 });

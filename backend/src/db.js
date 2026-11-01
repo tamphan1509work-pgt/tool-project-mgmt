@@ -243,6 +243,22 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity, entity_id, id);
 
+-- Thông báo khi được @nhắc tên trong bình luận
+CREATE TABLE IF NOT EXISTS mentions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id   INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  comment_id  INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+  entity      TEXT NOT NULL,
+  entity_id   INTEGER NOT NULL,
+  actor       TEXT NOT NULL,
+  excerpt     TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  read_at     TEXT,
+  emailed_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mentions_member ON mentions(member_id, read_at);
+
 -- Cài đặt hệ thống (key -> JSON)
 CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,

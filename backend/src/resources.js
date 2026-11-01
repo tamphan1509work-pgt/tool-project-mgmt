@@ -360,6 +360,8 @@ const endAfterStart = (data, existing) => {
 export const projects = {
   table: 'projects',
   resource: 'projects',
+  scopeColumn: 'id',
+  adminWrite: true,
   projectIdOf: (row) => row.id,
   label: 'dự án',
   fields: {
@@ -417,6 +419,7 @@ export const projects = {
 export const categories = {
   table: 'categories',
   resource: 'categories',
+  adminWrite: true,
   label: 'danh mục',
   fields: {
     project_id: projectRef,
@@ -465,6 +468,7 @@ export const categories = {
 export const milestones = {
   table: 'milestones',
   resource: 'milestones',
+  adminWrite: true,
   label: 'milestone',
   fields: {
     project_id: projectRef,
@@ -520,6 +524,12 @@ export function projectMembers(db, projectId) {
 export const members = {
   table: 'members',
   resource: 'members',
+  // Danh sách thành viên chỉ dành cho quản trị viên; thành viên chỉ xem / sửa hồ sơ của chính mình
+  authorize(req, action, row) {
+    if (req.user?.is_admin) return;
+    if ((action === 'read' || action === 'update') && row?.id === req.user?.id) return;
+    throw new HttpError(403, 'Chỉ quản trị viên mới quản lý được thành viên');
+  },
   projectIdOf: () => null,
   label: 'thành viên',
   fields: {

@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { categoryTree } from '../categories.js';
 import EntityForm from '../components/EntityForm.jsx';
 import { Empty, ErrorBox, Icon, Loading, Modal } from '../components/ui.jsx';
+import { useAuth } from '../auth.jsx';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import { categoryFields } from '../forms.js';
 
@@ -18,6 +19,7 @@ const COUNTS = [
 export function CategoryList({ project }) {
   const projectId = project.id;
   const { setProjectId } = useProject();
+  const isAdmin = Boolean(useAuth().user?.is_admin);
   const { refreshLookup } = useLookup();
   const toast = useToast();
   const confirm = useConfirm();
@@ -83,9 +85,11 @@ export function CategoryList({ project }) {
           onChange={(e) => setQ(e.target.value)}
         />
         <div className="spacer" />
-        <button className="btn btn-primary" onClick={() => setEditing({})}>
-          <Icon name="plus" /> Thêm danh mục
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={() => setEditing({})}>
+            <Icon name="plus" /> Thêm danh mục
+          </button>
+        )}
       </div>
       <ErrorBox error={error} onRetry={reload} />
       {loading && !data ? (
@@ -142,6 +146,7 @@ export function CategoryList({ project }) {
                     );
                   })}
                   <td className="row-actions">
+                    {isAdmin && (<>
                     <button
                       className="icon-btn"
                       title="Thêm danh mục con"
@@ -155,6 +160,7 @@ export function CategoryList({ project }) {
                     <button className="icon-btn danger" title="Xoá" onClick={() => remove(c)}>
                       <Icon name="trash" size={16} />
                     </button>
+                    </>)}
                   </td>
                 </tr>
               ))}

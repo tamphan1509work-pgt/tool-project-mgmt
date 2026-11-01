@@ -28,6 +28,8 @@ export default function DetailPage({
   historyTab = false, // hoặc thành một tab riêng
   tabs, // (data) => [{ key, label, count, render: () => JSX }]: tab bổ sung bên cạnh tab "Chi tiết"
   backTo, // đường quay lại (chuỗi hoặc (data) => chuỗi); mặc định là danh sách
+  readOnly = false, // chỉ xem: ẩn nút Sửa / Xoá
+  canDelete = true, // ẩn riêng nút Xoá
 }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -139,12 +141,18 @@ export default function DetailPage({
         <div className="detail-actions no-print">
           <CopyLinkButton resource={resource} id={data.id} label={codeOf(data)} />
           {actions?.(data, { update, reload })}
-          <button className="btn" onClick={() => setEditing(true)}>
-            <Icon name="edit" size={16} /> Sửa
-          </button>
-          <button className="btn btn-danger-ghost" onClick={remove}>
-            <Icon name="trash" size={16} /> Xoá
-          </button>
+          {!readOnly && (
+            <>
+              <button className="btn" onClick={() => setEditing(true)}>
+                <Icon name="edit" size={16} /> Sửa
+              </button>
+              {canDelete && (
+                <button className="btn btn-danger-ghost" onClick={remove}>
+                  <Icon name="trash" size={16} /> Xoá
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 

@@ -131,6 +131,26 @@ export default function SettingsPage() {
 
         <section className="card section">
           <div className="section-head">
+            <h3>@Nhắc tên trong bình luận</h3>
+          </div>
+          <Toggle
+            id="mention_web"
+            checked={form.mention_web}
+            onChange={set('mention_web')}
+            label="Thông báo trên web khi được @nhắc tên"
+            hint="Hiện ở mục “Nhắc đến bạn” trong chuông thông báo; bấm vào để mở thẳng tab Bình luận."
+          />
+          <Toggle
+            id="mention_email"
+            checked={form.mention_email}
+            onChange={set('mention_email')}
+            label="Gửi email ngay khi được @nhắc tên"
+            hint="Cần cấu hình SMTP. Thành viên đã tắt “Email nhắc deadline” trong hồ sơ sẽ không nhận email."
+          />
+        </section>
+
+        <section className="card section">
+          <div className="section-head">
             <h3>Email nhắc deadline</h3>
           </div>
           <Toggle

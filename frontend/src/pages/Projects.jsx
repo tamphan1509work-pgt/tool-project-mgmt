@@ -7,7 +7,8 @@ import { HistoryList } from '../components/History.jsx';
 import { CategoryList } from './Categories.jsx';
 import { MilestoneList } from './Milestones.jsx';
 import { Badge, Icon, Prose } from '../components/ui.jsx';
-import { fmtDate, options } from '../constants.js';
+import { fmtDate, label, options } from '../constants.js';
+import { useAuth } from '../auth.jsx';
 import { useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import { projectFields } from '../forms.js';
 
@@ -16,8 +17,10 @@ const period = (p) =>
 
 export function ProjectList() {
   const { refreshProjects, projectId } = useProject();
+  const { user } = useAuth();
   return (
     <ResourceList
+      readOnly={!user?.is_admin}
       resource="projects"
       noun="dự án"
       scoped={false}
@@ -72,6 +75,7 @@ function Members({ project, reload }) {
   const confirm = useConfirm();
   const { lookup, refreshLookup } = useLookup();
   const { refreshProjects } = useProject();
+  const isAdmin = Boolean(useAuth().user?.is_admin);
   const [form, setForm] = useState({ member_id: '', name: '', email: '', role: 'developer' });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
@@ -131,7 +135,7 @@ function Members({ project, reload }) {
   return (
     <Section title={`Thành viên dự án (${project.members.length})`}>
       {project.members.length === 0 ? (
-        <div className="muted">Dự án chưa có thành viên. Thêm thành viên bên dưới.</div>
+        <div className="muted">Dự án chưa có thành viên.{isAdmin && ' Thêm thành viên bên dưới.'}</div>
       ) : (
         <div className="table-wrap">
           <table className="table compact">
@@ -142,7 +146,7 @@ function Members({ project, reload }) {
                 <th>Email</th>
                 <th style={{ width: 230 }}>Vai trò trong dự án</th>
                 <th style={{ width: 110 }}>Tham gia</th>
-                <th style={{ width: 40 }} />
+                {isAdmin && <th style={{ width: 40 }} />}
               </tr>
             </thead>
             <tbody>
@@ -150,12 +154,19 @@ function Members({ project, reload }) {
                 <tr key={m.id}>
                   <td className="col-stt">{i + 1}</td>
                   <td>
-                    <Link to={`/members/${m.id}`}>
+                    {isAdmin ? (
+                      <Link to={`/members/${m.id}`}>
+                        <strong>{m.name}</strong>
+                      </Link>
+                    ) : (
                       <strong>{m.name}</strong>
-                    </Link>
+                    )}
                   </td>
                   <td className="small">{m.email || <span className="muted">—</span>}</td>
                   <td>
+                    {!isAdmin ? (
+                      label('memberRole', m.role)
+                    ) : (
                     <select
                       value={m.role}
                       aria-label={`Vai trò của ${m.name}`}
@@ -167,13 +178,16 @@ function Members({ project, reload }) {
                         </option>
                       ))}
                     </select>
+                    )}
                   </td>
                   <td className="small">{fmtDate(m.joined_at)}</td>
-                  <td>
-                    <button className="icon-btn danger" title="Gỡ khỏi dự án" onClick={() => remove(m)}>
-                      <Icon name="trash" size={16} />
-                    </button>
-                  </td>
+                  {isAdmin && (
+                    <td>
+                      <button className="icon-btn danger" title="Gỡ khỏi dự án" onClick={() => remove(m)}>
+                        <Icon name="trash" size={16} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -181,6 +195,7 @@ function Members({ project, reload }) {
         </div>
       )}
 
+      {isAdmin && (
       <form className="member-form" onSubmit={add}>
         <div className="member-form-title">Thêm thành viên</div>
         <div className="inline-form">
@@ -236,6 +251,7 @@ function Members({ project, reload }) {
         </div>
         {Object.values(errors).length > 0 && <div className="field-error">{Object.values(errors).join(' · ')}</div>}
       </form>
+      )}
     </Section>
   );
 }
@@ -342,8 +358,10 @@ function ProjectTabs({ project, reload }) {
 export function ProjectDetail() {
   const navigate = useNavigate();
   const { setProjectId, refreshProjects, projectId } = useProject();
+  const { user } = useAuth();
   return (
     <DetailPage
+      readOnly={!user?.is_admin}
       resource="projects"
       backLabel="Danh sách dự án"
       formFields={projectFields}

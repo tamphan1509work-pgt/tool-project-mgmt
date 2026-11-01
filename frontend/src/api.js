@@ -105,12 +105,11 @@ export const api = {
   removeAccount: (memberId) => request('DELETE', `/members/${memberId}/account`),
   comments: (params) => request('GET', `/comments${qs(params)}`),
   addComment: (data) => request('POST', '/comments', data),
-  updateComment: (id, data) => request('PATCH', `/comments/${id}`, data),
-  removeComment: (id) => request('DELETE', `/comments/${id}`),
   history: (params) => request('GET', `/history${qs(params)}`),
   settings: () => request('GET', '/settings'),
   saveSettings: (data) => request('PUT', '/settings', data),
   notifications: (params) => request('GET', `/notifications${qs(params)}`),
+  readMentions: (body) => request('POST', '/notifications/mentions/read', body),
   previewEmails: () => request('POST', '/notifications/email/preview', {}),
   runEmails: (force = false) => request('POST', '/notifications/email/run', { force }),
   // target: 'meetings' | 'test-runs'

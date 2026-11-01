@@ -134,6 +134,7 @@ export default function ResourceList({
   rowActions, // (row) => JSX: nút thêm trên từng dòng
   reloadKey, // đổi giá trị để tải lại danh sách
   statusChips, // { field, kind }: nhãn lọc trạng thái kèm số lượng phía trên danh sách
+  readOnly = false, // chỉ xem: ẩn nút Thêm / Sửa / Xoá
 }) {
   const [params, setParam, setParams] = useParamSetter();
   const navigate = useNavigate();
@@ -240,9 +241,11 @@ export default function ResourceList({
         )}
         <div className="spacer" />
         {headerExtra}
-        <button className="btn btn-primary" onClick={() => setEditing('new')}>
-          <Icon name="plus" /> Thêm {noun}
-        </button>
+        {!readOnly && (
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>
+            <Icon name="plus" /> Thêm {noun}
+          </button>
+        )}
       </div>
       {statusChips && (
         <StatusChips
@@ -278,7 +281,7 @@ export default function ResourceList({
                       {c.sort && sort === c.sort && <span className="sort-ind">{order === 'asc' ? '▲' : '▼'}</span>}
                     </th>
                   ))}
-                  <th style={{ width: rowActions ? 148 : 116 }} />
+                  <th style={{ width: (rowActions ? 148 : 116) - (readOnly ? 64 : 0) }} />
                 </tr>
               </thead>
               <tbody>
@@ -298,12 +301,16 @@ export default function ResourceList({
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
                       {rowActions?.(row)}
                       <CopyLinkButton compact resource={resource} id={row.id} label={codeOf(row)} />
-                      <button className="icon-btn" title="Sửa" onClick={() => startEdit(row)}>
-                        <Icon name="edit" size={16} />
-                      </button>
-                      <button className="icon-btn danger" title="Xoá" onClick={() => remove(row)}>
-                        <Icon name="trash" size={16} />
-                      </button>
+                      {!readOnly && (
+                        <>
+                          <button className="icon-btn" title="Sửa" onClick={() => startEdit(row)}>
+                            <Icon name="edit" size={16} />
+                          </button>
+                          <button className="icon-btn danger" title="Xoá" onClick={() => remove(row)}>
+                            <Icon name="trash" size={16} />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

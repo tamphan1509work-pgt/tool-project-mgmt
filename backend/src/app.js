@@ -155,11 +155,26 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   api.use(async (req, _res, next) => {
     const user = await userFromToken(db, bearer(req));
     if (!user) throw new HttpError(401, 'Bạn cần đăng nhập');
+    // Thành viên chỉ làm việc với các dự án mình được thêm vào; quản trị viên có toàn quyền (null)
+    user.allowedProjects = user.is_admin
+      ? null
+      : db.prepare('SELECT project_id FROM project_members WHERE member_id = ?').all(user.id).map((r) => r.project_id);
     req.user = user;
     next();
   });
   const requireAdmin = (req) => {
     if (!req.user?.is_admin) throw new HttpError(403, 'Chỉ quản trị viên mới thực hiện được thao tác này');
+  };
+  const canAccessProject = (req, projectId) =>
+    !req.user.allowedProjects || req.user.allowedProjects.includes(projectId);
+  const assertProject = (req, projectId) => {
+    if (!canAccessProject(req, projectId)) throw new HttpError(403, 'Bạn không có quyền truy cập dự án này');
+  };
+  /** Dự án từ ?project_id=, kiểm tra quyền truy cập */
+  const projectFor = (req) => {
+    const project = requireProject(db, req.query);
+    assertProject(req, project.id);
+    return project;
   };
 
   api.get('/auth/me', (req, res) => res.json(publicUser(req.user)));
@@ -250,12 +265,37 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     db
       .prepare('SELECT member_id, is_admin, disabled, last_login_at, created_at FROM accounts WHERE member_id = ?')
       .get(memberId) ?? null;
-  api.get('/members/:id/account', (req, res) => res.json(accountOf(parseId(req.params.id))));
+  api.get('/members/:id/account', (req, res) => {
+    const memberId = parseId(req.params.id);
+    if (memberId !== req.user.id) requireAdmin(req);
+    res.json(accountOf(memberId));
+  });
   api.get('/enums', (_req, res) => res.json(ENUMS));
   api.get('/config', (_req, res) => res.json({ maxUploadBytes }));
 
   // Ghi lịch sử cho các thao tác ngoài CRUD chung
   const projectOf = (table, id) => db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).get(id)?.project_id ?? null;
+  /** Kiểm tra quyền theo dự án của một bản ghi (bản ghi không tồn tại thì để route tự báo 404) */
+  const assertRow = (req, table, id) => {
+    const pid = projectOf(table, id);
+    if (pid !== null) assertProject(req, pid);
+  };
+  const assertRun = (req, runId) => {
+    const r = db.prepare('SELECT test_case_id FROM test_runs WHERE id = ?').get(runId);
+    if (r) assertRow(req, 'test_cases', r.test_case_id);
+  };
+  /** Dự án của một file đính kèm (qua biên bản, tài liệu hoặc lần chạy test) */
+  const attachmentProject = (id) =>
+    db
+      .prepare(
+        `SELECT COALESCE(m.project_id, d.project_id, tc.project_id) AS pid FROM attachments a
+         LEFT JOIN meetings m ON m.id = a.meeting_id
+         LEFT JOIN documents d ON d.id = a.document_id
+         LEFT JOIN test_runs r ON r.id = a.test_run_id
+         LEFT JOIN test_cases tc ON tc.id = r.test_case_id
+         WHERE a.id = ?`,
+      )
+      .get(id)?.pid ?? null;
   const logAction = (req, entity, entityId, projectId, action, summary, changes) =>
     recordHistory(db, { projectId, entity, entityId, action, summary, changes, actor: actorOf(req) });
   const taskCode = (id) => `TASK-${String(id).padStart(3, '0')}`;
@@ -282,6 +322,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   api.post('/meetings/:id/attachments', (req, res) => {
     const meetingId = parseId(req.params.id);
+    assertRow(req, 'meetings', meetingId);
     if (!db.prepare('SELECT 1 FROM meetings WHERE id = ?').get(meetingId)) {
       throw new HttpError(404, `Không tìm thấy cuộc họp #${meetingId}`);
     }
@@ -292,6 +333,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   api.post('/documents/:id/attachments', (req, res) => {
     const docId = parseId(req.params.id);
+    assertRow(req, 'documents', docId);
     if (!db.prepare('SELECT 1 FROM documents WHERE id = ?').get(docId)) {
       throw new HttpError(404, `Không tìm thấy tài liệu #${docId}`);
     }
@@ -303,6 +345,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   api.post('/test-runs/:id/attachments', (req, res) => {
     const runId = parseId(req.params.id);
+    assertRun(req, runId);
     const run = db.prepare('SELECT test_case_id FROM test_runs WHERE id = ?').get(runId);
     if (!run) throw new HttpError(404, `Không tìm thấy lần chạy test #${runId}`);
     const file = addAttachment('test_run_id', runId, req.body);
@@ -321,6 +364,8 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     const id = parseId(req.params.id);
     const file = db.prepare('SELECT * FROM attachments WHERE id = ?').get(id);
     if (!file) throw new HttpError(404, `Không tìm thấy file #${id}`);
+    const pid = attachmentProject(id);
+    if (pid !== null) assertProject(req, pid);
     // Chỉ cho xem trực tiếp ảnh (không gồm SVG) để tránh chạy nội dung do người dùng tải lên
     const inline = req.query.inline === '1' && /^image\/(png|jpe?g|gif|webp|bmp)$/.test(file.mime_type);
     const ascii = file.name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, "'");
@@ -337,6 +382,8 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   api.delete('/attachments/:id', (req, res) => {
     const id = parseId(req.params.id);
+    const pid = attachmentProject(id);
+    if (pid !== null) assertProject(req, pid);
     const file = db
       .prepare(
         `SELECT a.name, a.meeting_id, a.document_id, r.test_case_id FROM attachments a
@@ -361,6 +408,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     const taskId = parseId(req.params.id);
     const task = db.prepare('SELECT id, project_id FROM tasks WHERE id = ?').get(taskId);
     if (!task) throw new HttpError(404, `Không tìm thấy task #${taskId}`);
+    assertProject(req, task.project_id);
     const data = validate(
       db,
       {
@@ -415,6 +463,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     const id = parseId(req.params.id);
     const link = db.prepare('SELECT * FROM task_links WHERE id = ?').get(id);
     if (!link) throw new HttpError(404, 'Không tìm thấy liên kết');
+    assertRow(req, 'tasks', link.task_id);
     db.prepare('DELETE FROM task_links WHERE id = ?').run(id);
     logAction(
       req,
@@ -430,6 +479,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   // ---- Test runs (lịch sử chạy test case) ----
   api.get('/test-cases/:id/runs', (req, res) => {
     const id = parseId(req.params.id);
+    assertRow(req, 'test_cases', id);
     res.json(
       db.prepare('SELECT * FROM test_runs WHERE test_case_id = ? ORDER BY executed_at DESC, id DESC').all(id),
     );
@@ -437,6 +487,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   api.post('/test-cases/:id/runs', (req, res) => {
     const id = parseId(req.params.id);
+    assertRow(req, 'test_cases', id);
     if (!db.prepare('SELECT 1 FROM test_cases WHERE id = ?').get(id)) {
       throw new HttpError(404, `Không tìm thấy test case #${id}`);
     }
@@ -460,6 +511,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
     const id = parseId(req.params.id);
     const run = db.prepare('SELECT * FROM test_runs WHERE id = ?').get(id);
     if (!run) throw new HttpError(404, `Không tìm thấy lần chạy #${id}`);
+    assertRow(req, 'test_cases', run.test_case_id);
     transaction(db, () => {
       db.prepare('DELETE FROM test_runs WHERE id = ?').run(id);
       // Đồng bộ lại trạng thái test case theo lần chạy mới nhất còn lại
@@ -486,11 +538,14 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   };
 
   api.get('/projects/:id/members', (req, res) => {
-    res.json(projectMembers(db, mustProject(req.params.id)));
+    const projectId = mustProject(req.params.id);
+    assertProject(req, projectId);
+    res.json(projectMembers(db, projectId));
   });
 
   // Thêm thành viên: chọn người có sẵn (member_id) hoặc tạo người mới (name, email)
   api.post('/projects/:id/members', (req, res) => {
+    requireAdmin(req);
     const projectId = mustProject(req.params.id);
     const data = validate(db, projectMember, req.body);
     let memberId = data.member_id;
@@ -519,6 +574,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   });
 
   api.patch('/projects/:id/members/:memberId', (req, res) => {
+    requireAdmin(req);
     const projectId = mustProject(req.params.id);
     const memberId = parseId(req.params.memberId);
     const data = validate(db, { role: { type: 'enum', values: ENUMS.memberRole, required: true } }, req.body);
@@ -531,6 +587,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   });
 
   api.delete('/projects/:id/members/:memberId', (req, res) => {
+    requireAdmin(req);
     const projectId = mustProject(req.params.id);
     const memberId = parseId(req.params.memberId);
     const info = db.prepare('DELETE FROM project_members WHERE project_id = ? AND member_id = ?').run(projectId, memberId);
@@ -543,6 +600,8 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   api.get('/gantt', (req, res) => {
     const projectId = req.query.project_id ? requireProject(db, req.query).id : null;
     const memberId = req.query.member_id ? parseId(req.query.member_id) : null;
+    // Thành viên chỉ xem được Gantt của chính mình (trong hồ sơ cá nhân)
+    if (memberId !== req.user.id) requireAdmin(req);
     const includeDone = req.query.include_done === 'true';
 
     let people;
@@ -585,7 +644,9 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
         name: m.name,
         email: m.email,
         position: m.position,
-        projects: projects.map((p) => ({ ...p, tasks: tasks.filter((t) => t.project_id === p.id) })),
+        projects: projects
+          .filter((p) => canAccessProject(req, p.id))
+          .map((p) => ({ ...p, tasks: tasks.filter((t) => t.project_id === p.id) })),
       };
     });
     res.json({ today: today(), members });
@@ -593,7 +654,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   // ---- Báo cáo test (test report) của dự án ----
   api.get('/test-report', (req, res) => {
-    const project = requireProject(db, req.query);
+    const project = projectFor(req);
     const statusCase = `
       COUNT(*) AS total,
       SUM(status = 'passed') AS passed,
@@ -713,6 +774,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   api.get('/comments', (req, res) => {
     const target = commentTarget(req.query.entity, req.query.entity_id);
+    assertProject(req, target.project_id);
     res.json(
       db
         .prepare(`${COMMENT_SELECT} WHERE c.entity = ? AND c.entity_id = ? ORDER BY c.id`)
@@ -744,28 +806,72 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
         'INSERT INTO comments (project_id, entity, entity_id, member_id, author_name, parent_id, body) VALUES (?, ?, ?, ?, ?, ?, ?)',
       )
       .run(target.project_id, entity, target.id, req.user.id, req.user.name, parentId, commentBody(req.body.body));
-    res.status(201).json(getComment(Number(info.lastInsertRowid)));
+    const comment = getComment(Number(info.lastInsertRowid));
+    const mentioned = notifyMentions(req, comment, target.project_id);
+    res.status(201).json({ ...comment, mentioned });
   });
 
-  // Sửa: chỉ người viết. Xoá: người viết hoặc quản trị viên
-  api.patch('/comments/:id', (req, res) => {
-    const c = getComment(parseId(req.params.id));
-    if (!c) throw new HttpError(404, 'Không tìm thấy bình luận');
-    if (c.member_id !== req.user.id) throw new HttpError(403, 'Chỉ người viết mới sửa được bình luận');
-    db.prepare("UPDATE comments SET body = ?, updated_at = datetime('now') WHERE id = ?").run(commentBody(req.body?.body), c.id);
-    res.json(getComment(c.id));
-  });
-
-  api.delete('/comments/:id', (req, res) => {
-    const c = getComment(parseId(req.params.id));
-    if (!c) throw new HttpError(404, 'Không tìm thấy bình luận');
-    if (c.member_id !== req.user.id && !req.user.is_admin) {
-      throw new HttpError(403, 'Chỉ người viết hoặc quản trị viên mới xoá được bình luận');
+  /**
+   * @nhắc tên: tìm "@Họ Tên" của các thành viên dự án trong nội dung bình luận,
+   * tạo thông báo trên web và gửi email (nếu bật & đã cấu hình SMTP).
+   */
+  const MENTION_TABLE = { tasks: ['tasks', 'TASK'], 'test-cases': ['test_cases', 'TC'], bugs: ['bugs', 'BUG'] };
+  const notifyMentions = (req, comment, projectId) => {
+    const settings = getSettings(db);
+    const people = db
+      .prepare(
+        `SELECT m.id, m.name, m.email, m.email_notifications FROM project_members pm
+         JOIN members m ON m.id = pm.member_id WHERE pm.project_id = ?`,
+      )
+      .all(projectId)
+      .sort((a, b) => b.name.length - a.name.length);
+    let text = comment.body;
+    const found = [];
+    for (const p of people) {
+      const token = `@${p.name}`;
+      let i = text.indexOf(token);
+      let hit = false;
+      while (i !== -1) {
+        const next = text[i + token.length];
+        // Sau tên phải là hết chuỗi, khoảng trắng hoặc dấu câu (tránh "@An" khớp "@Anh")
+        if (next === undefined || /[\s.,;:!?)\]}"'’]/.test(next)) {
+          hit = true;
+          text = text.slice(0, i) + ' '.repeat(token.length) + text.slice(i + token.length);
+        }
+        i = text.indexOf(token, i + 1);
+      }
+      if (hit && p.id !== req.user.id) found.push(p);
     }
-    // Xoá bình luận gốc thì xoá luôn các trả lời
-    db.prepare('DELETE FROM comments WHERE id = ? OR parent_id = ?').run(c.id, c.id);
-    res.status(204).end();
-  });
+    if (!found.length) return [];
+    const [table, prefix] = MENTION_TABLE[comment.entity];
+    const title = db.prepare(`SELECT title FROM ${table} WHERE id = ?`).get(comment.entity_id)?.title ?? '';
+    const project = db.prepare('SELECT code FROM projects WHERE id = ?').get(projectId);
+    const code = `${prefix}-${String(comment.entity_id).padStart(3, '0')}`;
+    const excerpt = comment.body.length > 300 ? `${comment.body.slice(0, 300)}…` : comment.body;
+    const ins = db.prepare(
+      'INSERT INTO mentions (member_id, project_id, comment_id, entity, entity_id, actor, excerpt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+    for (const p of found) {
+      const id = Number(ins.run(p.id, projectId, comment.id, comment.entity, comment.entity_id, req.user.name, excerpt).lastInsertRowid);
+      if (mailer && settings.mention_email && p.email && p.email_notifications) {
+        const link = `${appUrl.replace(/\/$/, '')}/${comment.entity}/${comment.entity_id}?tab=comments`;
+        const subject = `[${project.code}] ${req.user.name} đã nhắc đến bạn trong ${code}`;
+        const textBody = `${req.user.name} đã nhắc đến bạn trong bình luận ở ${code} "${title}":\n\n${comment.body}\n\nXem: ${link}`;
+        const esc = (v) => String(v).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+        const html = `<p><b>${esc(req.user.name)}</b> đã nhắc đến bạn trong bình luận ở <b>${esc(code)}</b> "${esc(title)}":</p>
+          <blockquote style="border-left:3px solid #4f46e5;margin:0;padding:6px 12px;white-space:pre-wrap">${esc(comment.body)}</blockquote>
+          <p><a href="${esc(link)}">Mở ${esc(code)}</a></p>`;
+        // Gửi nền, không làm chậm việc đăng bình luận
+        Promise.resolve()
+          .then(() => mailer.send({ to: p.email, subject, text: textBody, html }))
+          .then(() => db.prepare("UPDATE mentions SET emailed_at = datetime('now') WHERE id = ?").run(id))
+          .catch((err) => console.error('Gửi email @nhắc tên thất bại:', err.message));
+      }
+    }
+    return found.map((p) => ({ id: p.id, name: p.name }));
+  };
+
+  // Bình luận không sửa / xoá được (giữ nguyên lịch sử trao đổi)
 
   // ---- Lịch sử thay đổi ----
   api.get('/history', (req, res) => {
@@ -776,6 +882,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
         entity: typeof req.query.entity === 'string' ? req.query.entity : null,
         entityId: req.query.entity_id ? parseId(req.query.entity_id) : null,
         projectId: req.query.project_id ? parseId(req.query.project_id) : null,
+        projectIds: req.user.allowedProjects,
         limit,
         offset,
       }),
@@ -797,18 +904,53 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   // Thông báo trên web: task / milestone trễ hoặc sắp đến hạn
   api.get('/notifications', (req, res) => {
     const settings = getSettings(db);
-    if (!settings.web_enabled) return res.json({ enabled: false, items: [] });
     const projectId = req.query.project_id ? parseId(req.query.project_id) : null;
-    const items = deadlineItems(db, {
-      projectId,
-      daysBefore: settings.remind_days_before,
-      includeMilestones: settings.include_milestones,
+    const items = settings.web_enabled
+      ? deadlineItems(db, {
+          projectId,
+          projectIds: req.user.allowedProjects,
+          daysBefore: settings.remind_days_before,
+          includeMilestones: settings.include_milestones,
+        })
+      : [];
+    // @nhắc tên: của người đang đăng nhập, ở mọi dự án mình còn được truy cập
+    const allowed = req.user.allowedProjects;
+    const mentions = settings.mention_web
+      ? db
+          .prepare(
+            `SELECT mn.id, mn.entity, mn.entity_id, mn.actor, mn.excerpt, mn.created_at, mn.read_at, mn.project_id,
+               p.code AS project_code
+             FROM mentions mn JOIN projects p ON p.id = mn.project_id
+             WHERE mn.member_id = ? ${allowed ? `AND mn.project_id IN (${allowed.map(() => '?').join(',') || 'NULL'})` : ''}
+             ORDER BY mn.id DESC LIMIT 30`,
+          )
+          .all(req.user.id, ...(allowed ?? []))
+      : [];
+    res.json({
+      enabled: settings.web_enabled || settings.mention_web,
+      deadlineEnabled: settings.web_enabled,
+      items,
+      mentions,
+      unreadMentions: mentions.filter((m) => !m.read_at).length,
     });
-    res.json({ enabled: true, items });
+  });
+
+  // Đánh dấu đã đọc thông báo @nhắc tên: { ids: [..] } hoặc { all: true }
+  api.post('/notifications/mentions/read', (req, res) => {
+    const body = req.body ?? {};
+    if (body.all === true) {
+      db.prepare("UPDATE mentions SET read_at = datetime('now') WHERE member_id = ? AND read_at IS NULL").run(req.user.id);
+    } else {
+      const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
+      const upd = db.prepare("UPDATE mentions SET read_at = datetime('now') WHERE id = ? AND member_id = ? AND read_at IS NULL");
+      for (const id of ids) upd.run(id, req.user.id);
+    }
+    res.status(204).end();
   });
 
   // Xem trước email nhắc deadline (không gửi)
-  api.post('/notifications/email/preview', (_req, res) => {
+  api.post('/notifications/email/preview', (req, res) => {
+    requireAdmin(req);
     res.json({ digests: buildEmailDigests(db, getSettings(db), { appUrl }), email: emailStatus() });
   });
 
@@ -828,8 +970,22 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   // ---- Dữ liệu cho dropdown liên kết (theo dự án) ----
   api.get('/lookup', (req, res) => {
-    const allProjects = db.prepare('SELECT id, code, name, status FROM projects ORDER BY name').all();
-    const allMembers = db.prepare('SELECT id, name, email, avatar FROM members ORDER BY name').all();
+    const allowed = req.user.allowedProjects;
+    const inAllowed = (col) => (allowed ? `WHERE ${col} IN (${allowed.map(() => '?').join(',') || 'NULL'})` : '');
+    const allProjects = db
+      .prepare(`SELECT id, code, name, status FROM projects ${inAllowed('id')} ORDER BY name`)
+      .all(...(allowed ?? []));
+    // Thành viên chỉ thấy những người cùng dự án (và quản trị viên)
+    const allMembers = db
+      .prepare(
+        `SELECT id, name, email, avatar FROM members ${
+          allowed
+            ? `WHERE id = ? OR id IN (SELECT member_id FROM project_members ${inAllowed('project_id')})
+               OR id IN (SELECT member_id FROM accounts WHERE is_admin = 1)`
+            : ''
+        } ORDER BY name`,
+      )
+      .all(...(allowed ? [req.user.id, ...allowed] : []));
     if (!req.query.project_id) {
       return res.json({
         projects: allProjects,
@@ -845,7 +1001,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
         modules: [],
       });
     }
-    const { id } = requireProject(db, req.query);
+    const { id } = projectFor(req);
     const people = db
       .prepare(
         `SELECT DISTINCT name FROM (
@@ -892,7 +1048,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   // ---- Dashboard (theo dự án) ----
   api.get('/dashboard', (req, res) => {
-    const project = requireProject(db, req.query);
+    const project = projectFor(req);
     const p = project.id;
     const d = today();
     const n = (sql, ...args) => db.prepare(sql).get(p, ...args).n;

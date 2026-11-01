@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { code, fmtDate } from '../constants.js';
+import { code, fmtDate, fmtDateTime } from '../constants.js';
 import { useConfirm, useProject, useToast } from '../context.jsx';
 import PasswordInput from './PasswordInput.jsx';
 import { Avatar } from './Avatar.jsx';
@@ -142,6 +142,8 @@ export function NotificationBell() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState('project');
+  const [tab, setTab] = useState(null); // null: tự chọn (ưu tiên "Nhắc đến bạn" khi có chưa đọc)
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [tick, setTick] = useState(0);
   const ref = useRef(null);
@@ -180,24 +182,96 @@ export function NotificationBell() {
   }, [open]);
 
   useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) setTab(null);
+  }, [open]);
+  // Gửi bình luận / đọc thông báo ở nơi khác -> tải lại
+  useEffect(() => {
+    const refresh = () => setTick((t) => t + 1);
+    window.addEventListener('pm:notifications-changed', refresh);
+    return () => window.removeEventListener('pm:notifications-changed', refresh);
+  }, []);
 
   if (!data?.enabled) return null;
   const items = data.items;
+  const mentions = data.mentions ?? [];
+  const unread = data.unreadMentions ?? 0;
   const overdue = items.filter((i) => i.kind === 'overdue').length;
+  const total = items.length + unread;
+  const showTab = tab ?? (unread > 0 || !data.deadlineEnabled ? 'mentions' : 'deadline');
+
+  const openMention = (m) => {
+    if (!m.read_at) api.readMentions({ ids: [m.id] }).then(() => setTick((t) => t + 1)).catch(() => {});
+    setOpen(false);
+    navigate(`/${m.entity}/${m.entity_id}?tab=comments`);
+  };
+  const readAll = () => api.readMentions({ all: true }).then(() => setTick((t) => t + 1)).catch(() => {});
 
   return (
     <div className="bell" ref={ref}>
       <button
-        className={`icon-btn bell-btn ${overdue ? 'has-overdue' : ''}`}
-        aria-label={`Thông báo: ${items.length} mục`}
+        className={`icon-btn bell-btn ${overdue || unread ? 'has-overdue' : ''}`}
+        aria-label={`Thông báo: ${total} mục`}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="bell" size={20} />
-        {items.length > 0 && <span className="bell-count">{items.length > 99 ? '99+' : items.length}</span>}
+        {total > 0 && <span className="bell-count">{total > 99 ? '99+' : total}</span>}
       </button>
       {open && (
-        <div className="bell-panel" role="dialog" aria-label="Thông báo deadline">
+        <div className="bell-panel" role="dialog" aria-label="Thông báo">
+          <div className="bell-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={showTab === 'mentions'}
+              className={showTab === 'mentions' ? 'active' : ''}
+              onClick={() => setTab('mentions')}
+            >
+              Nhắc đến bạn {unread > 0 && <span className="tab-count">{unread}</span>}
+            </button>
+            {data.deadlineEnabled && (
+              <button
+                role="tab"
+                aria-selected={showTab === 'deadline'}
+                className={showTab === 'deadline' ? 'active' : ''}
+                onClick={() => setTab('deadline')}
+              >
+                Deadline {items.length > 0 && <span className="tab-count">{items.length}</span>}
+              </button>
+            )}
+          </div>
+          {showTab === 'mentions' ? (
+            <>
+              {mentions.length === 0 ? (
+                <div className="muted pad-sm">Chưa có ai nhắc đến bạn trong bình luận.</div>
+              ) : (
+                <ul className="bell-list mention-list">
+                  {mentions.map((m) => (
+                    <li key={m.id} className={m.read_at ? 'is-read' : 'is-unread'}>
+                      <button type="button" onClick={() => openMention(m)}>
+                        <span className="bell-title">
+                          <strong>{m.actor}</strong> đã nhắc đến bạn trong{' '}
+                          <span className="mono">
+                            {m.project_code} · {code(m.entity, m.entity_id)}
+                          </span>
+                        </span>
+                        <span className="mention-excerpt">{m.excerpt}</span>
+                        <span className="muted small">{fmtDateTime(m.created_at)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {unread > 0 && (
+                <div className="bell-foot">
+                  <button type="button" className="link-btn" onClick={readAll}>
+                    Đánh dấu đã đọc tất cả
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
           <div className="bell-head">
             <strong>Deadline cần chú ý</strong>
             <div className="segmented">
@@ -234,6 +308,8 @@ export function NotificationBell() {
                 </li>
               ))}
             </ul>
+          )}
+            </>
           )}
           <div className="bell-foot">
             <Link to="/settings">Cài đặt thông báo</Link>

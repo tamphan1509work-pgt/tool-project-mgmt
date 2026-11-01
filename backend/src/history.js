@@ -31,8 +31,9 @@ export function refLabel(db, table, id) {
 
 export function recordHistory(db, { projectId = null, entity, entityId, action, summary = null, changes = null, actor = null }) {
   db.prepare(
-    `INSERT INTO history (project_id, entity, entity_id, action, summary, changes, actor)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    // Lưu tới mili giây để dòng thời gian (VD quy trình test) sắp đúng thứ tự các thao tác liên tiếp
+    `INSERT INTO history (project_id, entity, entity_id, action, summary, changes, actor, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))`,
   ).run(projectId, entity, entityId, action, summary, changes?.length ? JSON.stringify(changes) : null, actor);
 }
 

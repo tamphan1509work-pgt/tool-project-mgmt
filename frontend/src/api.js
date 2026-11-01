@@ -91,6 +91,7 @@ export const api = {
   update: (resource, id, data) => request('PATCH', `/${resource}/${id}`, data),
   remove: (resource, id) => request('DELETE', `/${resource}/${id}`),
   addRun: (testCaseId, data) => request('POST', `/test-cases/${testCaseId}/runs`, data),
+  testTimeline: (testCaseId) => request('GET', `/test-cases/${testCaseId}/timeline`),
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
   dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
   config: () => request('GET', '/config'),

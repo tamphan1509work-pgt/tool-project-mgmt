@@ -325,6 +325,12 @@ function migrate(db) {
   const taskCols3 = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
   if (!taskCols3.includes('requester')) db.exec('ALTER TABLE tasks ADD COLUMN requester TEXT');
 
+  // Bug tạo từ lần chạy test nào (để dựng dòng thời gian quy trình test)
+  const bugCols = db.prepare('PRAGMA table_info(bugs)').all().map((c) => c.name);
+  if (!bugCols.includes('test_run_id')) {
+    db.exec('ALTER TABLE bugs ADD COLUMN test_run_id INTEGER REFERENCES test_runs(id) ON DELETE SET NULL');
+  }
+
   // PIC / Hỗ trợ: nhiều người, lưu dạng "Tên 1, Tên 2" (test case trước đây chưa có PIC)
   for (const [table, cols] of [
     ['tasks', ['supporters']],

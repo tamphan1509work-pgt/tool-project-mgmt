@@ -266,6 +266,7 @@ describe('test cases, runs & report', () => {
 describe('bugs', () => {
   test('resolved_at và liên kết test case', async () => {
     const tc = (await req('POST', '/test-cases', { project_id: P, title: 'TC bug' })).body;
+    await req('POST', `/test-cases/${tc.id}/runs`, { result: 'failed' });
     let r = await req('POST', '/bugs', { project_id: P, title: 'Bug 1', severity: 'blocker', test_case_id: tc.id });
     assert.equal(r.body.status, 'new');
     const id = r.body.id;
@@ -1183,5 +1184,56 @@ describe('PIC & Hỗ trợ nhiều người', () => {
     await req('PATCH', `/members/${lan.id}`, { name: 'Vũ Ngọc Lan' });
     assert.ok((await req('GET', `/lookup?project_id=${pay}`)).body.people.includes('Vũ Ngọc Lan'));
     for (const [res, x] of [['tasks', id], ['test-cases', tc.id], ['bugs', bug.id]]) await req('DELETE', `/${res}/${x}`);
+  });
+});
+
+describe('quy trình test theo thời gian', () => {
+  test('chỉ báo bug khi Không đạt; test lại đóng / mở lại bug; dòng thời gian', async () => {
+    const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
+    const tc = (await req('POST', '/test-cases', { project_id: pay, title: 'Quy trình' })).body;
+    let t = (await req('GET', `/test-cases/${tc.id}/timeline`)).body;
+    assert.equal(t.stage, 'not_run');
+
+    // Chưa chạy / đang Đạt thì không báo bug được
+    let r = await req('POST', '/bugs', { project_id: pay, title: 'Sớm', test_case_id: tc.id });
+    assert.equal(r.status, 400);
+    assert.match(r.body.details.test_case_id, /Không đạt/);
+    await req('POST', `/test-cases/${tc.id}/runs`, { result: 'passed' });
+    assert.equal((await req('POST', '/bugs', { project_id: pay, title: 'x', test_case_id: tc.id })).status, 400);
+
+    const fail1 = (await req('POST', `/test-cases/${tc.id}/runs`, { result: 'failed', note: 'lỗi A' })).body;
+    assert.equal((await req('GET', `/test-cases/${tc.id}/timeline`)).body.stage, 'report_bug');
+    const bug = (await req('POST', '/bugs', { project_id: pay, title: 'Lỗi A', test_case_id: tc.id })).body;
+    assert.equal(bug.test_run_id, fail1.id, 'gắn với lần chạy Không đạt');
+    assert.equal((await req('GET', `/test-cases/${tc.id}/timeline`)).body.stage, 'fixing');
+    await req('PATCH', `/bugs/${bug.id}`, { status: 'resolved' });
+    assert.equal((await req('GET', `/test-cases/${tc.id}/timeline`)).body.stage, 'retest');
+
+    // Test lại Không đạt -> mở lại bug
+    r = (await req('POST', `/test-cases/${tc.id}/runs`, { result: 'failed', update_bugs: true })).body;
+    assert.deepEqual(r.bugs_updated.map((b) => b.status), ['reopened']);
+    assert.equal((await req('GET', `/bugs/${bug.id}`)).body.status, 'reopened');
+    await req('PATCH', `/bugs/${bug.id}`, { status: 'resolved' });
+    // Test lại Đạt -> đóng bug
+    r = (await req('POST', `/test-cases/${tc.id}/runs`, { result: 'passed', update_bugs: true })).body;
+    assert.deepEqual(r.bugs_updated.map((b) => b.status), ['closed']);
+    t = (await req('GET', `/test-cases/${tc.id}/timeline`)).body;
+    assert.equal(t.stage, 'passed');
+    const types = t.events.map((e) => (e.type === 'run' ? `run:${e.result}${e.retest ? ':retest' : ''}` : e.type === 'bug_status' ? `bug:${e.to}` : e.type));
+    assert.deepEqual(types, [
+      'created',
+      'run:passed',
+      'run:failed',
+      'bug_created',
+      'bug:resolved',
+      'run:failed:retest',
+      'bug:reopened',
+      'bug:resolved',
+      'run:passed:retest',
+      'bug:closed',
+    ]);
+    // Không tự cập nhật bug nếu không yêu cầu
+    await req('POST', `/test-cases/${tc.id}/runs`, { result: 'failed' });
+    assert.equal((await req('GET', `/bugs/${bug.id}`)).body.status, 'closed');
   });
 });

@@ -13,6 +13,7 @@ import { Badge, ErrorBox, Modal, Prose } from '../components/ui.jsx';
 import { code, fmtDateTime, label, options } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import { bugFields, testCaseFields } from '../forms.js';
+import { FlowStage, TestFlowStepper, TimelineTab, useTimeline } from './TestFlow.jsx';
 
 const pct = (v) => (v == null ? '—' : `${v}%`);
 
@@ -290,6 +291,7 @@ function TestCaseTable() {
           width: 120,
           render: (t) => <Badge kind="testStatus" value={t.status} />,
         },
+        { key: 'flow', title: 'Quy trình', width: 150, render: (t) => <FlowStage tc={t} /> },
         {
           key: 'assignee',
           title: 'PIC',
@@ -340,6 +342,9 @@ function RunPanel({ tc, reload, onFailed }) {
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState([]);
   const maxBytes = useUploadLimit();
+  // Bug đã sửa đang chờ test lại: theo kết quả, Đạt -> đóng bug, Không đạt -> mở lại bug
+  const fixedBugs = tc.bugs.filter((b) => b.status === 'resolved');
+  const [syncBugs, setSyncBugs] = useState(true);
 
   const run = async (result) => {
     setBusy(true);
@@ -349,7 +354,12 @@ function RunPanel({ tc, reload, onFailed }) {
       } catch {
         // bỏ qua nếu trình duyệt chặn lưu trữ
       }
-      const r = await api.addRun(tc.id, { result, note, executed_by: by });
+      const r = await api.addRun(tc.id, {
+        result,
+        note,
+        executed_by: by,
+        update_bugs: fixedBugs.length > 0 && syncBugs,
+      });
       // Tải file bằng chứng (ảnh chụp màn hình, log…) gắn vào lần chạy vừa tạo
       const ok = files.filter((f) => f.size <= maxBytes);
       const { uploaded, errors } = await uploadFiles('test-runs', r.id, ok);
@@ -358,11 +368,15 @@ function RunPanel({ tc, reload, onFailed }) {
         `Đã ghi nhận: ${label('testStatus', result)}${uploaded ? ` · ${uploaded} file đính kèm` : ''}`,
         result === 'passed' ? 'success' : 'warn',
       );
+      for (const b of r.bugs_updated ?? []) {
+        toast(`${b.status === 'closed' ? 'Đã đóng' : 'Đã mở lại'} ${code('bugs', b.id)}`, b.status === 'closed' ? 'success' : 'warn');
+      }
       setNote('');
       setFiles([]);
       reload();
       refreshLookup();
-      if (result === 'failed') onFailed({ ...r, attachmentNames: ok.map((f) => f.name) });
+      // Không đạt lần đầu (chưa có bug để mở lại) -> mở form báo bug với thông tin điền sẵn
+      if (result === 'failed' && !(r.bugs_updated ?? []).length) onFailed({ ...r, attachmentNames: ok.map((f) => f.name) });
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -371,8 +385,26 @@ function RunPanel({ tc, reload, onFailed }) {
   };
 
   return (
-    <Section title="Thực thi test">
-      <div className="run-panel">
+    <Section title={fixedBugs.length ? 'Test lại' : 'Thực thi test'}>
+      <div className="run-panel" id="run-panel">
+        {fixedBugs.length > 0 && (
+          <div className="retest-box">
+            <div>
+              <strong>Chờ test lại:</strong>{' '}
+              {fixedBugs.map((b, i) => (
+                <span key={b.id}>
+                  {i > 0 && ', '}
+                  <Link to={`/bugs/${b.id}`}>{code('bugs', b.id)}</Link> {b.title}
+                </span>
+              ))}{' '}
+              đã được sửa.
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={syncBugs} onChange={(e) => setSyncBugs(e.target.checked)} /> Cập nhật bug
+              theo kết quả: Đạt → Đã đóng, Không đạt → Mở lại
+            </label>
+          </div>
+        )}
         <textarea
           rows={2}
           placeholder="Ghi chú kết quả (tuỳ chọn)…"
@@ -461,6 +493,23 @@ function RunHistory({ tc, reload }) {
   );
 }
 
+/** Thanh các bước quy trình test ở đầu tab Chi tiết */
+function FlowBlock({ tc, onReportBug }) {
+  const { data } = useTimeline(tc);
+  if (!data) return null;
+  return (
+    <TestFlowStepper
+      data={data}
+      onReportBug={onReportBug}
+      onRetest={() => {
+        const el = document.getElementById('run-panel');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el?.querySelector('textarea')?.focus();
+      }}
+    />
+  );
+}
+
 export function TestCaseDetail() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -503,6 +552,12 @@ export function TestCaseDetail() {
       historyTab
       tabs={(tc, { reload }) => [
         {
+          key: 'timeline',
+          label: 'Quy trình test',
+          count: tc.runs.length + tc.bugs.length || undefined,
+          render: () => <TimelineTab tc={tc} reload={reload} />,
+        },
+        {
           key: 'comments',
           label: 'Bình luận',
           count: tc.comment_count,
@@ -517,7 +572,12 @@ export function TestCaseDetail() {
         </>
       )}
       actions={(tc) => (
-        <button className="btn" onClick={() => setBugDraft(draftFrom(tc, tc.runs[0]))}>
+        <button
+          className="btn"
+          disabled={tc.status !== 'failed'}
+          title={tc.status === 'failed' ? 'Báo bug từ lần chạy Không đạt' : 'Chỉ báo bug khi test case đang Không đạt'}
+          onClick={() => setBugDraft(draftFrom(tc, tc.runs[0]))}
+        >
           + Báo bug
         </button>
       )}
@@ -526,6 +586,7 @@ export function TestCaseDetail() {
         <>
           <div className="detail-grid">
             <div className="detail-main">
+              <FlowBlock tc={tc} onReportBug={() => setBugDraft(draftFrom(tc, tc.runs[0]))} />
               <RunPanel tc={tc} reload={reload} onFailed={(run) => setBugDraft(draftFrom(tc, run))} />
               <Section title="Điều kiện tiên quyết">
                 <Prose text={tc.preconditions} />

@@ -240,6 +240,10 @@ export const testCases = {
     assignee: { type: 'people' }, // PIC
     supporters: { type: 'people' }, // Hỗ trợ
   },
+  // Số bug đang mở / đã sửa chờ test lại: để hiện bước hiện tại của quy trình test trong danh sách
+  selectExtra: `
+    (SELECT COUNT(*) FROM bugs b WHERE b.test_case_id = test_cases.id AND b.status IN ('new', 'in_progress', 'reopened')) AS open_bug_count,
+    (SELECT COUNT(*) FROM bugs b WHERE b.test_case_id = test_cases.id AND b.status = 'resolved') AS fixed_bug_count`,
   trackCreator: true,
   commentable: true,
   countBy: 'status',
@@ -331,7 +335,21 @@ export const bugs = {
   extraFilters(query, where) {
     if (query.open === 'true') where.push("status IN ('new', 'in_progress', 'reopened')");
   },
-  beforeSave(data, existing) {
+  beforeSave(data, existing, db) {
+    if (!existing) data.created_at = db.prepare("SELECT strftime('%Y-%m-%d %H:%M:%f', 'now') AS t").get().t;
+    // Quy trình test: chỉ báo bug cho test case khi lần chạy gần nhất Không đạt
+    if (data.test_case_id != null && data.test_case_id !== existing?.test_case_id) {
+      const tc = db.prepare('SELECT status FROM test_cases WHERE id = ?').get(data.test_case_id);
+      if (tc && tc.status !== 'failed') {
+        throw new HttpError(400, 'Dữ liệu không hợp lệ', {
+          test_case_id: 'Chỉ tạo bug cho test case đang ở trạng thái Không đạt. Hãy thực thi test và ghi nhận Không đạt trước.',
+        });
+      }
+      data.test_run_id =
+        db
+          .prepare("SELECT id FROM test_runs WHERE test_case_id = ? AND result = 'failed' ORDER BY executed_at DESC, id DESC LIMIT 1")
+          .get(data.test_case_id)?.id ?? null;
+    } else if (existing && data.test_case_id === null) data.test_run_id = null;
     if (data.status !== undefined && data.status !== existing?.status) {
       data.resolved_at = ['resolved', 'closed'].includes(data.status) ? nowSql() : null;
       if (existing && data.status === 'closed' && existing.resolved_at) data.resolved_at = existing.resolved_at;

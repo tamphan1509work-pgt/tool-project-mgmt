@@ -462,7 +462,7 @@ export function seed(db, { reset = false } = {}) {
       db.prepare('UPDATE test_cases SET status = ?, last_run_at = ? WHERE id = ?').run(result, at, id);
       return runId;
     };
-    run(tc1, 'failed', -4, 'Callback không cập nhật trạng thái đơn hàng');
+    const failedCallback = run(tc1, 'failed', -4, 'Callback không cập nhật trạng thái đơn hàng');
     run(tc1, 'passed', -1, 'Đã fix, chạy lại OK');
     const failedOtp = run(tc2, 'failed', -2, 'Lần thứ 3 vẫn cho nhập tiếp');
     const log = new TextEncoder().encode(
@@ -494,7 +494,9 @@ export function seed(db, { reset = false } = {}) {
       assignee: 'Vũ Ngọc Lan',
       reporter: 'Phạm Thu Dung',
       test_case_id: tc2,
+      test_run_id: failedOtp,
       task_id: t3,
+      created_at: `${day(-2)} 10:40:00`,
     });
     b({
       title: 'Nút "Gửi lại OTP" bị che trên màn hình iPhone SE',
@@ -512,11 +514,13 @@ export function seed(db, { reset = false } = {}) {
       title: 'Callback NAPAS không cập nhật trạng thái đơn hàng',
       severity: 'blocker',
       priority: 'critical',
-      status: 'resolved',
+      status: 'closed',
       assignee: 'Hoàng Gia Huy',
       reporter: 'Phạm Thu Dung',
       test_case_id: tc1,
+      test_run_id: failedCallback,
       task_id: t2,
+      created_at: `${day(-4)} 10:45:00`,
       resolved_at: `${day(-1)} 09:00:00`,
     });
     b({
@@ -601,6 +605,13 @@ export function seed(db, { reset = false } = {}) {
     hist('tasks', t2, 'create', 'Tạo task "Xây dựng API thanh toán thẻ nội địa"', null, 'Nguyễn Văn An', -10, '02:00:00');
     hist('tasks', t2, 'update', null, [{ field: 'status', from: 'todo', to: 'in_progress' }], 'Hoàng Gia Huy', -9, '02:30:00');
     hist('tasks', t2, 'update', null, [{ field: 'status', from: 'in_progress', to: 'testing' }, { field: 'due_date', from: day(-1), to: day(1) }], 'Hoàng Gia Huy', -1, '09:15:00');
+    // Quy trình test của TC-001: Không đạt -> BUG-003 -> sửa -> test lại Đạt -> đóng bug
+    const bugCallback = db.prepare('SELECT id FROM bugs WHERE test_run_id = ?').get(failedCallback).id;
+    const bugOtp = db.prepare('SELECT id FROM bugs WHERE test_run_id = ?').get(failedOtp).id;
+    hist('bugs', bugCallback, 'update', null, [{ field: 'status', from: 'new', to: 'in_progress' }], 'Hoàng Gia Huy', -3, '02:00:00');
+    hist('bugs', bugCallback, 'update', null, [{ field: 'status', from: 'in_progress', to: 'resolved' }], 'Hoàng Gia Huy', -1, '09:00:00');
+    hist('bugs', bugCallback, 'update', 'Tự cập nhật sau khi test lại: Đạt', [{ field: 'status', from: 'resolved', to: 'closed' }], 'Phạm Thu Dung', -1, '10:11:00');
+    hist('bugs', bugOtp, 'update', null, [{ field: 'status', from: 'new', to: 'in_progress' }], 'Vũ Ngọc Lan', -1, '07:00:00');
     hist('projects', pay, 'member', 'Thêm thành viên "Đỗ Quang Minh" (Designer)', null, 'Nguyễn Văn An', -20, '03:00:00');
 
     // ---------- Bình luận ----------
@@ -653,7 +664,7 @@ export function seed(db, { reset = false } = {}) {
     db.prepare("UPDATE tasks SET created_by = 'Trần Thị Bình', requester = 'Phòng Kinh doanh' WHERE project_id = ?").run(crm);
     db.prepare("UPDATE tasks SET created_by = 'Hoàng Gia Huy' WHERE parent_id IS NOT NULL").run();
     db.prepare("UPDATE tasks SET requester = 'Lê Minh Châu' WHERE title LIKE 'Chuẩn bị môi trường%'").run();
-    db.prepare("UPDATE test_cases SET created_by = 'Phạm Thu Dung'").run();
+    db.prepare("UPDATE test_cases SET created_by = 'Phạm Thu Dung', created_at = ?").run(`${day(-6)} 02:00:00`);
     db.prepare('UPDATE bugs SET created_by = reporter').run();
     db.prepare('UPDATE documents SET created_by = author').run();
     db.prepare('UPDATE meetings SET created_by = facilitator').run();

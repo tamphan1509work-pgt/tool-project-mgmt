@@ -493,19 +493,107 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
       throw new HttpError(404, `Không tìm thấy test case #${id}`);
     }
     const data = validate(db, testRuns, req.body);
+    data.executed_by ??= req.user.name; // mặc định: người đang đăng nhập
+    // Test lại sau khi bug đã sửa: Đạt -> đóng bug "Đã sửa"; Không đạt -> mở lại bug "Đã sửa"
+    const syncBugs = req.body?.update_bugs === true && ['passed', 'failed'].includes(data.result);
+    const bugsUpdated = [];
     const run = transaction(db, () => {
       const info = db
-        .prepare('INSERT INTO test_runs (test_case_id, result, note, executed_by) VALUES (?, ?, ?, ?)')
+        .prepare(
+          "INSERT INTO test_runs (test_case_id, result, note, executed_by, executed_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))",
+        )
         .run(id, data.result, data.note ?? null, data.executed_by ?? null);
       const row = db.prepare('SELECT * FROM test_runs WHERE id = ?').get(Number(info.lastInsertRowid));
       db.prepare(
         "UPDATE test_cases SET status = ?, last_run_at = ?, updated_at = datetime('now') WHERE id = ?",
       ).run(data.result, row.executed_at, id);
+      if (syncBugs) {
+        const to = data.result === 'passed' ? 'closed' : 'reopened';
+        for (const b of db.prepare("SELECT id, title, project_id FROM bugs WHERE test_case_id = ? AND status = 'resolved'").all(id)) {
+          db.prepare(
+            `UPDATE bugs SET status = ?, resolved_at = CASE WHEN ? = 'reopened' THEN NULL ELSE resolved_at END,
+             updated_at = datetime('now') WHERE id = ?`,
+          ).run(to, to, b.id);
+          recordHistory(db, {
+            projectId: b.project_id,
+            entity: 'bugs',
+            entityId: b.id,
+            action: 'update',
+            summary: `Tự cập nhật sau khi test lại: ${data.result === 'passed' ? 'Đạt' : 'Không đạt'}`,
+            changes: [{ field: 'status', from: 'resolved', to }],
+            actor: actorOf(req),
+          });
+          bugsUpdated.push({ id: b.id, title: b.title, status: to });
+        }
+      }
       return row;
     });
     const label = { passed: 'Đạt', failed: 'Không đạt', blocked: 'Bị chặn' }[data.result];
     logAction(req, 'test-cases', id, projectOf('test_cases', id), 'run', `Thực thi test: ${label}${data.note ? ` — ${data.note}` : ''}`);
-    res.status(201).json(run);
+    res.status(201).json({ ...run, bugs_updated: bugsUpdated });
+  });
+
+  // ---- Quy trình test theo thời gian: chạy test -> báo bug -> sửa bug -> test lại ----
+  api.get('/test-cases/:id/timeline', (req, res) => {
+    const id = parseId(req.params.id);
+    const tc = db.prepare('SELECT id, project_id, status, created_at, created_by FROM test_cases WHERE id = ?').get(id);
+    if (!tc) throw new HttpError(404, `Không tìm thấy test case #${id}`);
+    assertProject(req, tc.project_id);
+    const events = [{ type: 'created', at: tc.created_at, actor: tc.created_by }];
+    const runs = db.prepare('SELECT * FROM test_runs WHERE test_case_id = ? ORDER BY executed_at, id').all(id);
+    const files = db.prepare('SELECT id, name, mime_type, size FROM attachments WHERE test_run_id = ? ORDER BY id');
+    let failedBefore = false;
+    runs.forEach((r, i) => {
+      events.push({
+        type: 'run',
+        at: r.executed_at,
+        actor: r.executed_by,
+        run_id: r.id,
+        index: i + 1,
+        retest: failedBefore, // đã từng Không đạt -> lần này là test lại
+        result: r.result,
+        note: r.note,
+        attachments: files.all(r.id),
+      });
+      if (r.result === 'failed') failedBefore = true;
+    });
+    const bugs = db
+      .prepare('SELECT id, title, status, severity, assignee, created_at, created_by, resolved_at, test_run_id FROM bugs WHERE test_case_id = ? ORDER BY id')
+      .all(id);
+    const statusHistory = db.prepare(
+      "SELECT created_at, actor, changes, summary FROM history WHERE entity = 'bugs' AND entity_id = ? AND action = 'update' ORDER BY created_at, id",
+    );
+    for (const b of bugs) {
+      events.push({ type: 'bug_created', at: b.created_at, actor: b.created_by, bug: b, run_id: b.test_run_id });
+      let sawResolved = false;
+      for (const h of statusHistory.all(b.id)) {
+        const c = JSON.parse(h.changes ?? '[]').find((x) => x.field === 'status');
+        if (!c) continue;
+        if (c.to === 'resolved') sawResolved = true;
+        events.push({ type: 'bug_status', at: h.created_at, actor: h.actor, bug: b, from: c.from, to: c.to, summary: h.summary });
+      }
+      // Dữ liệu cũ không có lịch sử trạng thái: dùng thời điểm "Đã sửa"
+      if (!sawResolved && b.resolved_at) {
+        events.push({ type: 'bug_status', at: b.resolved_at, actor: null, bug: b, from: null, to: 'resolved' });
+      }
+    }
+    const order = { created: 0, run: 1, bug_created: 2, bug_status: 3 };
+    events.sort((a, b) =>
+      a.type === 'created' ? -1 : b.type === 'created' ? 1 : a.at < b.at ? -1 : a.at > b.at ? 1 : order[a.type] - order[b.type],
+    );
+
+    // Bước hiện tại của quy trình
+    const open = bugs.filter((b) => ['new', 'in_progress', 'reopened'].includes(b.status));
+    const fixed = bugs.filter((b) => b.status === 'resolved');
+    const last = runs[runs.length - 1];
+    let stage;
+    if (!last) stage = 'not_run';
+    else if (last.result === 'passed') stage = fixed.length ? 'retest_passed_open' : 'passed';
+    else if (last.result === 'blocked') stage = 'blocked';
+    else if (fixed.length && !open.length) stage = 'retest';
+    else if (open.length) stage = 'fixing';
+    else stage = 'report_bug';
+    res.json({ stage, events, bugs, runs: runs.length });
   });
 
   api.delete('/test-runs/:id', (req, res) => {

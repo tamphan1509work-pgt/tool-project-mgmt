@@ -133,7 +133,15 @@ export const bugFields = [
   { name: 'assignee', label: 'PIC (người xử lý)', type: 'people' },
   { name: 'supporters', label: 'Hỗ trợ', type: 'people' },
   { name: 'reporter', label: 'Người báo bug', type: 'person' },
-  { name: 'test_case_id', label: 'Test case liên quan', type: 'ref', source: 'testCases' },
+  {
+    name: 'test_case_id',
+    label: 'Test case liên quan',
+    type: 'ref',
+    source: 'testCases',
+    // Quy trình test: chỉ báo bug cho test case đang Không đạt
+    filter: (tc) => tc.status === 'failed',
+    hint: 'Chỉ chọn được test case đang Không đạt (thực thi test và ghi nhận Không đạt trước khi báo bug).',
+  },
   { name: 'task_id', label: 'Task liên quan', type: 'ref', source: 'tasks' },
   { name: 'description', label: 'Mô tả', type: 'textarea', rows: 3 },
   { name: 'steps_to_reproduce', label: 'Các bước tái hiện', type: 'textarea', rows: 4, placeholder: '1. ...\n2. ...' },

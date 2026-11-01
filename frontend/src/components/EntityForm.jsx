@@ -45,7 +45,7 @@ function MultiRef({ field, value, onChange, lookup, id }) {
   );
 }
 
-function FieldInput({ field, value, onChange, id, lookup }) {
+function FieldInput({ field, value, onChange, id, lookup, record }) {
   const common = {
     id,
     name: field.name,
@@ -78,7 +78,11 @@ function FieldInput({ field, value, onChange, id, lookup }) {
         </select>
       );
     case 'ref': {
-      const items = lookup[field.source] ?? [];
+      const all = lookup[field.source] ?? [];
+      // field.filter(item, record): lọc lựa chọn (VD task cha không được là chính nó / subtask)
+      const items = field.filter
+        ? all.filter((it) => field.filter(it, record) || String(it.id) === String(value))
+        : all;
       return (
         <select {...common}>
           <option value="">— Không liên kết —</option>
@@ -168,6 +172,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
                 field={f}
                 id={id}
                 lookup={lookup}
+                record={initial}
                 value={values[f.name]}
                 onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
               />

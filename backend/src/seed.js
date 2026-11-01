@@ -14,6 +14,8 @@ const day = (offset) => {
 
 const TABLES = [
   'task_documents',
+  'task_links',
+  'meeting_attachments',
   'test_runs',
   'bugs',
   'test_cases',
@@ -172,6 +174,25 @@ export function seed(db, { reset = false } = {}) {
         'Demo thành công luồng thanh toán thẻ nội địa.\nCòn 2 bug nghiêm trọng ở màn hình xác nhận OTP.\nTeam thấy việc review code còn chậm.',
       decisions: '- Giới hạn PR tối đa 400 dòng\n- Ưu tiên sửa bug OTP trong tuần này',
     });
+    const enc = (text) => new TextEncoder().encode(text);
+    const attach = (meeting_id, name, mime_type, text) => {
+      const data = enc(text);
+      insert('meeting_attachments', { meeting_id, name, mime_type, size: data.length, data });
+    };
+    attach(
+      m1,
+      'Kickoff-agenda.md',
+      'text/markdown',
+      '# Kick-off Cổng thanh toán v2\n\n1. Mục tiêu & phạm vi\n2. Kiến trúc tổng quan\n3. Kế hoạch sprint 1\n4. Phân công\n',
+    );
+    attach(
+      m1,
+      'Phan-cong-nhan-su.csv',
+      'text/csv',
+      'Ho ten,Vai tro\nNguyen Van An,PM\nTran Thi Binh,BA\nLe Minh Chau,Tech lead\nPham Thu Dung,QA\n',
+    );
+    attach(m2, 'Retro-notes.txt', 'text/plain', 'Tot: demo dung han\nChua tot: review code cham\nHanh dong: PR <= 400 dong\n');
+
     insert('meetings', {
       project_id: pay,
       title: 'Sprint 2 Planning',
@@ -243,7 +264,7 @@ export function seed(db, { reset = false } = {}) {
       },
       [dUi, dSrs],
     );
-    t({
+    const tStaging = t({
       project_id: pay,
       title: 'Chuẩn bị môi trường staging',
       status: 'in_progress',
@@ -263,7 +284,7 @@ export function seed(db, { reset = false } = {}) {
       due_date: day(4),
       meeting_id: m2,
     });
-    t(
+    const tRefund = t(
       {
         project_id: pay,
         title: 'Viết test case cho luồng hoàn tiền',
@@ -321,6 +342,38 @@ export function seed(db, { reset = false } = {}) {
       start_date: day(0),
       due_date: day(6),
     });
+
+    // ---------- Subtask ----------
+    for (const [title, status, assignee, offset] of [
+      ['Khởi tạo giao dịch NAPAS', 'done', 'Hoàng Gia Huy', -6],
+      ['Xử lý callback & cập nhật đơn hàng', 'done', 'Hoàng Gia Huy', -3],
+      ['API truy vấn trạng thái giao dịch', 'in_progress', 'Hoàng Gia Huy', 0],
+      ['Viết unit test cho service thanh toán', 'todo', 'Hoàng Gia Huy', 1],
+    ]) {
+      insert('tasks', {
+        project_id: pay,
+        parent_id: t2,
+        title,
+        status,
+        assignee,
+        priority: 'high',
+        due_date: day(offset),
+        completed_at: status === 'done' ? `${day(offset)} 17:00:00` : null,
+      });
+    }
+    for (const [title, status] of [
+      ['Giao diện nhập OTP 6 số', 'done'],
+      ['Đếm ngược & gửi lại OTP', 'in_progress'],
+      ['Khoá giao dịch sau 3 lần sai', 'todo'],
+    ]) {
+      insert('tasks', { project_id: pay, parent_id: t3, title, status, assignee: 'Vũ Ngọc Lan', priority: 'high' });
+    }
+
+    // ---------- Liên kết task ----------
+    const link = (task_id, other_task_id, type) => insert('task_links', { task_id, other_task_id, type });
+    link(t3, t2, 'depends_on'); // màn hình OTP phụ thuộc API thanh toán
+    link(tRefund, tStaging, 'depends_on'); // viết test hoàn tiền cần staging
+    link(tRefund, t2, 'relates');
 
     // ---------- Test case & kết quả chạy ----------
     const tc = (row) => insert('test_cases', { project_id: pay, ...row });

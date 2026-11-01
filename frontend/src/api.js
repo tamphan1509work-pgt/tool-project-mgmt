@@ -29,6 +29,21 @@ async function request(method, path, body) {
   return data;
 }
 
+/** Tải nội dung nhị phân (file đính kèm) */
+async function requestBlob(path) {
+  let res;
+  try {
+    res = await doFetch(`/api${path}`, { method: 'GET' });
+  } catch {
+    throw new ApiError(0, 'Không kết nối được tới máy chủ');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new ApiError(res.status, data?.error || `Lỗi ${res.status}`);
+  }
+  return res.blob();
+}
+
 const qs = (params = {}) => {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -47,6 +62,12 @@ export const api = {
   addRun: (testCaseId, data) => request('POST', `/test-cases/${testCaseId}/runs`, data),
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
   dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
+  config: () => request('GET', '/config'),
+  addAttachment: (meetingId, data) => request('POST', `/meetings/${meetingId}/attachments`, data),
+  removeAttachment: (id) => request('DELETE', `/attachments/${id}`),
+  attachmentBlob: (id, inline = false) => requestBlob(`/attachments/${id}/download${inline ? '?inline=1' : ''}`),
+  addTaskLink: (taskId, data) => request('POST', `/tasks/${taskId}/links`, data),
+  removeTaskLink: (linkId) => request('DELETE', `/task-links/${linkId}`),
   gantt: (params) => request('GET', `/gantt${qs(params)}`),
   testReport: (params) => request('GET', `/test-report${qs(params)}`),
   lookup: (params) => request('GET', `/lookup${qs(params)}`),

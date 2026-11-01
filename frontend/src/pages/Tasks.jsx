@@ -6,7 +6,7 @@ import ResourceList, { Filters, SearchBox, useParamSetter } from '../components/
 import { Badge, ErrorBox, Icon, Prose } from '../components/ui.jsx';
 import { code, fmtDate, fmtDateTime, isOverdue, LABELS, options } from '../constants.js';
 import { useAsync, useProject, useToast } from '../context.jsx';
-import { DocLink } from './Documents.jsx';
+import { Subtasks, TaskDocuments, TaskLinks, TaskTitleMeta } from './TaskParts.jsx';
 import { taskFields } from '../forms.js';
 
 const FILTERS = [
@@ -14,6 +14,7 @@ const FILTERS = [
   { name: 'priority', label: 'Ưu tiên', options: options('priority') },
   { name: 'assignee', label: 'Người làm', source: 'people' },
   { name: 'overdue', label: 'Quá hạn', type: 'toggle' },
+  { name: 'parent_id', label: 'Ẩn subtask', type: 'toggle', value: 'none' },
 ];
 
 const Due = ({ task }) =>
@@ -112,6 +113,7 @@ function Board({ switcher }) {
                   <Link to={`/tasks/${t.id}`} className="board-card-title">
                     {t.title}
                   </Link>
+                  <TaskTitleMeta task={t} />
                   <div className="board-card-meta">
                     <span className="mono muted">{code('tasks', t.id)}</span>
                     <Badge kind="priority" value={t.priority} />
@@ -156,7 +158,17 @@ export function TaskList() {
       headerExtra={switcher}
       searchPlaceholder="Tìm theo tên, mô tả, người làm, mã…"
       columns={[
-        { key: 'title', title: 'Tên task', sort: 'title', render: (t) => <strong>{t.title}</strong> },
+        {
+          key: 'title',
+          title: 'Tên task',
+          sort: 'title',
+          render: (t) => (
+            <div className="person-cell">
+              <strong>{t.title}</strong>
+              <TaskTitleMeta task={t} />
+            </div>
+          ),
+        },
         {
           key: 'status',
           title: 'Trạng thái',
@@ -189,6 +201,11 @@ export function TaskDetail() {
           <Badge kind="taskStatus" value={t.status} />
           <Badge kind="priority" value={t.priority} />
           {isOverdue(t) && <span className="badge badge-red">Quá hạn</span>}
+          {t.parent && (
+            <Link to={`/tasks/${t.parent.id}`} className="badge badge-purple">
+              ↳ Subtask của {code('tasks', t.parent.id)}
+            </Link>
+          )}
         </>
       )}
       actions={(t, { update }) => (
@@ -207,26 +224,15 @@ export function TaskDetail() {
         </select>
       )}
     >
-      {(t) => (
+      {(t, { reload }) => (
         <div className="detail-grid">
           <div className="detail-main">
             <Section title="Mô tả">
               <Prose text={t.description} placeholder="Chưa có mô tả" />
             </Section>
-            <Section title={`Tài liệu liên quan (${t.documents.length})`}>
-              <LinkedList
-                resource="documents"
-                items={t.documents}
-                render={(d) => (
-                  <>
-                    <Badge kind="documentType" value={d.type} />
-                    {d.version && <span className="muted">v{d.version}</span>}
-                    <DocLink url={d.url} />
-                  </>
-                )}
-                empty="Chưa liên kết tài liệu thiết kế / đặc tả nào. Bấm Sửa để chọn tài liệu."
-              />
-            </Section>
+            {!t.parent && <Subtasks task={t} reload={reload} />}
+            <TaskDocuments task={t} reload={reload} />
+            <TaskLinks task={t} reload={reload} />
             <Section
               title={`Test case (${t.test_cases.length})`}
               extra={
@@ -259,6 +265,18 @@ export function TaskDetail() {
             <Section title="Thông tin">
               <InfoList
                 items={[
+                  ...(t.parent
+                    ? [
+                        [
+                          'Thuộc task',
+                          t.parent && (
+                            <Link to={`/tasks/${t.parent.id}`}>
+                              {code('tasks', t.parent.id)} · {t.parent.title}
+                            </Link>
+                          ),
+                        ],
+                      ]
+                    : []),
                   ['Người thực hiện', t.assignee],
                   ['Ngày bắt đầu', fmtDate(t.start_date)],
                   ['Hạn hoàn thành', <Due key="d" task={t} />],

@@ -272,7 +272,7 @@ export function createResource(db, cfg) {
 
   router.post('/', (req, res) => {
     const data = validate(db, cfg.fields, req.body);
-    cfg.beforeSave?.(data, null);
+    cfg.beforeSave?.(data, null, db);
     checkSameProject(data, null);
     const links = splitLinks(data);
     const cols = Object.keys(data);
@@ -293,7 +293,7 @@ export function createResource(db, cfg) {
     const id = parseId(req.params.id);
     const existing = mustGet(id);
     const data = validate(db, cfg.fields, req.body, { partial: true });
-    cfg.beforeSave?.(data, existing);
+    cfg.beforeSave?.(data, existing, db);
     checkSameProject(data, existing);
     const links = splitLinks(data);
     const cols = Object.keys(data);

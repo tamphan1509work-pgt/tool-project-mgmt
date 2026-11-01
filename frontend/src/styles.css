@@ -519,3 +519,56 @@ input:focus, select:focus, textarea:focus {
 .g-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); }
 .g-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .g-sw { display: inline-block; width: 22px; height: 12px; border-radius: 3px; position: static; }
+
+/* ---------- File đính kèm, subtask, liên kết task ---------- */
+.dropzone {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px;
+  margin-top: 12px; padding: 18px 12px; border: 2px dashed var(--border); border-radius: var(--radius);
+  color: var(--muted); text-align: center; transition: background 0.15s, border-color 0.15s;
+}
+.dropzone.is-dragging { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.link-btn {
+  border: none; background: none; padding: 0; cursor: pointer; color: var(--primary); text-align: left; font: inherit;
+  word-break: break-word;
+}
+.link-btn:hover { text-decoration: underline; }
+.preview-img { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: 6px; }
+.preview-text {
+  margin: 0; max-height: 65vh; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  background: var(--surface-2); padding: 12px 14px; border-radius: 8px; font-size: 13px;
+}
+
+.task-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.task-meta:empty { display: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; padding: 0 7px; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap;
+}
+.chip-danger { color: var(--t-red-fg); background: var(--t-red-bg); border-color: transparent; }
+
+.progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-bottom: 10px; }
+.progress > div { height: 100%; background: var(--s-green); border-radius: 999px; transition: width 0.2s; }
+.subtask-list { list-style: none; margin: 0; padding: 0; }
+.subtask-list li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border);
+}
+.subtask-list li:last-child { border-bottom: none; }
+.subtask-list .col-stt { width: 24px; }
+.subtask-title { flex: 1 1 200px; min-width: 0; color: var(--text); }
+.subtask-list li.is-done .subtask-title { text-decoration: line-through; color: var(--muted); }
+
+.warn-box {
+  padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px;
+  background: var(--t-red-bg); color: var(--t-red-fg);
+}
+.link-group { margin-bottom: 8px; }
+.link-group-title { font-weight: 600; font-size: 13px; margin-top: 4px; }
+.link-form select { min-width: 160px; }
+
+.picker-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.picker-list li { border-bottom: 1px solid var(--border); }
+.picker-list li:last-child { border-bottom: none; }
+.picker-list label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; }
+.picker-list label:hover { background: var(--surface-2); }
+.picker-title { flex: 1 1 200px; min-width: 0; }
+.picker .form-actions { align-items: center; }

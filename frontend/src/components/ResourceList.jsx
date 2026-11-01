@@ -37,8 +37,8 @@ export function Filters({ filters, params, setParam }) {
         <label key={f.name} className="toggle">
           <input
             type="checkbox"
-            checked={params.get(f.name) === 'true'}
-            onChange={(e) => setParam(f.name, e.target.checked ? 'true' : '')}
+            checked={params.get(f.name) === (f.value ?? 'true')}
+            onChange={(e) => setParam(f.name, e.target.checked ? (f.value ?? 'true') : '')}
           />
           {f.label}
         </label>

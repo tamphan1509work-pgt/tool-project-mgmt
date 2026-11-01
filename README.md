@@ -6,8 +6,8 @@
 |---|---|
 | **Dự án & thành viên** | Danh sách dự án (mã, tên, trạng thái, thời gian), số task/bug đang mở. Trong từng dự án: thêm thành viên (chọn người có sẵn hoặc tạo mới), gán **vai trò trong dự án** (PM, BA, Tech lead, Developer, Tester, Designer, DevOps, Stakeholder), đổi vai trò, gỡ thành viên. Một người có thể tham gia nhiều dự án với vai trò khác nhau |
 | **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
-| **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
-| **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp và **liên kết tài liệu** thiết kế / đặc tả |
+| **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
+| **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp. **Tài liệu liên quan** chọn từ mục Tài liệu (thêm / gỡ ngay trên trang task). **Subtask** (1 cấp) với thanh tiến độ, đánh dấu xong nhanh. **Task liên quan / phụ thuộc**: *phụ thuộc vào*, *đang chặn*, *liên quan*, cảnh báo khi task đang chờ task khác, chặn phụ thuộc vòng tròn |
 | **Test report** | Báo cáo kiểm thử của dự án: tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module; danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) với lịch sử chạy |
 | **Bug** | Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
 | **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
@@ -92,12 +92,17 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 |---|---|---|
 | GET | `/{resource}` | Danh sách. Query: `q`, các bộ lọc (VD `status=new,reopened`, `assignee=...`, `meeting_id=none`), `sort`, `order=asc\|desc`, `limit`, `offset`. Trả về `{ items, total, limit, offset }` |
 | GET | `/{resource}/:id` | Chi tiết, kèm dữ liệu liên quan (action items, test runs, bug liên kết…) |
-| POST | `/{resource}` | Tạo mới. Task nhận thêm `document_ids: [..]` để liên kết tài liệu |
+| POST | `/{resource}` | Tạo mới. Task nhận thêm `document_ids: [..]` để liên kết tài liệu và `parent_id` để tạo subtask |
 | PATCH / PUT | `/{resource}/:id` | Cập nhật (chỉ các field gửi lên) |
 | DELETE | `/{resource}/:id` | Xoá |
 | POST | `/test-cases/:id/runs` | Ghi nhận một lần chạy test `{ result: passed\|failed\|blocked, note, executed_by }` – tự cập nhật trạng thái test case |
 | GET | `/test-cases/:id/runs` | Lịch sử chạy |
 | DELETE | `/test-runs/:id` | Xoá một lần chạy (trạng thái test case được tính lại) |
+| POST | `/meetings/:id/attachments` | Đính kèm file `{ name, mime_type, data }` (`data` là base64) |
+| GET | `/attachments/:id/download` | Tải file (`?inline=1` để xem ảnh trực tiếp) |
+| DELETE | `/attachments/:id` | Xoá file |
+| POST | `/tasks/:id/links` | Liên kết task `{ other_task_id, type: depends_on \| blocks \| relates }` |
+| DELETE | `/task-links/:id` | Gỡ liên kết |
 | GET / POST | `/projects/:id/members` | Danh sách / thêm thành viên dự án `{ member_id }` hoặc `{ name, email }` kèm `role` |
 | PATCH / DELETE | `/projects/:id/members/:memberId` | Đổi vai trò `{ role }` / gỡ khỏi dự án |
 | GET | `/gantt?project_id=&member_id=&include_done=true` | Dữ liệu biểu đồ Gantt: thành viên → dự án (vai trò) → task |
@@ -106,7 +111,7 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | GET | `/lookup?project_id=` | Danh sách rút gọn cho dropdown (dự án, thành viên, meetings, tasks, test cases, tài liệu, người, module) |
 | GET | `/enums` | Các giá trị enum hợp lệ |
 
-Bộ lọc đặc biệt: `GET /tasks?overdue=true`, `GET /bugs?open=true`, `GET /meetings?from=YYYY-MM-DD&to=YYYY-MM-DD`.
+Bộ lọc đặc biệt: `GET /tasks?overdue=true`, `GET /tasks?parent_id=none` (bỏ subtask), `GET /bugs?open=true`, `GET /meetings?from=YYYY-MM-DD&to=YYYY-MM-DD`.
 
 Lỗi validate trả về `400` dạng `{ "error": "Dữ liệu không hợp lệ", "details": { "field": "thông báo" } }`.
 

@@ -13,10 +13,25 @@ import {
   projectMember,
   projectMembers,
   projects,
+  taskLinks,
   tasks,
   testCases,
   testRuns,
 } from './resources.js';
+
+const DEFAULT_MAX_UPLOAD = 10 * 1024 * 1024; // 10 MB / file
+
+/** base64 -> bytes (chạy được cả trên Node lẫn trình duyệt của bản demo) */
+function decodeBase64(b64) {
+  if (typeof b64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return null;
+  if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(b64, 'base64'));
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+const fmtMB = (bytes) => `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
 
 const countBy = (db, table, col, projectId) => {
   const rows = db
@@ -39,15 +54,130 @@ const requireProject = (db, query) => {
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {{ staticDir?: string }} [opts]
  */
-export function createApp(db, { staticDir } = {}) {
+export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD } = {}) {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '2mb' }));
+  // File đính kèm gửi dạng base64 trong JSON (lớn hơn file gốc ~33%)
+  app.use(express.json({ limit: Math.ceil(maxUploadBytes * 1.4) + 64 * 1024 }));
 
   const api = express.Router();
 
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.get('/enums', (_req, res) => res.json(ENUMS));
+  api.get('/config', (_req, res) => res.json({ maxUploadBytes }));
+
+  // ---- File đính kèm biên bản họp ----
+  api.post('/meetings/:id/attachments', (req, res) => {
+    const meetingId = parseId(req.params.id);
+    if (!db.prepare('SELECT 1 FROM meetings WHERE id = ?').get(meetingId)) {
+      throw new HttpError(404, `Không tìm thấy cuộc họp #${meetingId}`);
+    }
+    const body = req.body ?? {};
+    const name = typeof body.name === 'string' ? body.name.replace(/[\\/\u0000-\u001f]/g, '_').trim() : '';
+    if (!name || name.length > 255) throw new HttpError(400, 'Dữ liệu không hợp lệ', { name: 'Tên file không hợp lệ' });
+    const mime =
+      typeof body.mime_type === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(body.mime_type)
+        ? body.mime_type
+        : 'application/octet-stream';
+    const data = decodeBase64(body.data);
+    if (!data || data.length === 0) throw new HttpError(400, 'Dữ liệu không hợp lệ', { data: 'File rỗng hoặc lỗi' });
+    if (data.length > maxUploadBytes) {
+      throw new HttpError(400, 'Dữ liệu không hợp lệ', { data: `File vượt quá ${fmtMB(maxUploadBytes)}` });
+    }
+    const info = db
+      .prepare('INSERT INTO meeting_attachments (meeting_id, name, mime_type, size, data) VALUES (?, ?, ?, ?, ?)')
+      .run(meetingId, name, mime, data.length, data);
+    res
+      .status(201)
+      .json(
+        db
+          .prepare('SELECT id, meeting_id, name, mime_type, size, created_at FROM meeting_attachments WHERE id = ?')
+          .get(Number(info.lastInsertRowid)),
+      );
+  });
+
+  api.get('/attachments/:id/download', (req, res) => {
+    const id = parseId(req.params.id);
+    const file = db.prepare('SELECT * FROM meeting_attachments WHERE id = ?').get(id);
+    if (!file) throw new HttpError(404, `Không tìm thấy file #${id}`);
+    // Chỉ cho xem trực tiếp ảnh (không gồm SVG) để tránh chạy nội dung do người dùng tải lên
+    const inline = req.query.inline === '1' && /^image\/(png|jpe?g|gif|webp|bmp)$/.test(file.mime_type);
+    const ascii = file.name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, "'");
+    res.status(200);
+    res.setHeader('Content-Type', file.mime_type);
+    res.setHeader('Content-Length', String(file.size));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader(
+      'Content-Disposition',
+      `${inline ? 'inline' : 'attachment'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    );
+    res.end(file.data);
+  });
+
+  api.delete('/attachments/:id', (req, res) => {
+    const info = db.prepare('DELETE FROM meeting_attachments WHERE id = ?').run(parseId(req.params.id));
+    if (!info.changes) throw new HttpError(404, 'Không tìm thấy file');
+    res.status(204).end();
+  });
+
+  // ---- Liên kết task: phụ thuộc / đang chặn / liên quan ----
+  api.post('/tasks/:id/links', (req, res) => {
+    const taskId = parseId(req.params.id);
+    const task = db.prepare('SELECT id, project_id FROM tasks WHERE id = ?').get(taskId);
+    if (!task) throw new HttpError(404, `Không tìm thấy task #${taskId}`);
+    const data = validate(
+      db,
+      {
+        other_task_id: { type: 'ref', table: 'tasks', required: true },
+        type: { type: 'enum', values: ENUMS.taskLinkType, required: true },
+      },
+      req.body,
+    );
+    const bad = (msg) => new HttpError(400, 'Dữ liệu không hợp lệ', { other_task_id: msg });
+    const other = db.prepare('SELECT id, project_id FROM tasks WHERE id = ?').get(data.other_task_id);
+    if (other.id === taskId) throw bad('Không thể liên kết task với chính nó');
+    if (other.project_id !== task.project_id) throw bad('Task được chọn thuộc dự án khác');
+
+    // "A chặn B" được lưu thành "B phụ thuộc vào A"
+    const [from, to, type] =
+      data.type === 'blocks' ? [other.id, taskId, 'depends_on'] : [taskId, other.id, data.type];
+
+    const exists =
+      type === 'relates'
+        ? db
+            .prepare(
+              `SELECT 1 FROM task_links WHERE type = 'relates'
+               AND ((task_id = ? AND other_task_id = ?) OR (task_id = ? AND other_task_id = ?))`,
+            )
+            .get(from, to, to, from)
+        : db
+            .prepare("SELECT 1 FROM task_links WHERE type = 'depends_on' AND task_id = ? AND other_task_id = ?")
+            .get(from, to);
+    if (exists) throw bad('Hai task này đã được liên kết như vậy');
+
+    if (type === 'depends_on') {
+      // Chặn phụ thuộc vòng tròn: nếu "to" (trực tiếp hoặc gián tiếp) đã phụ thuộc vào "from"
+      const next = db.prepare("SELECT other_task_id AS id FROM task_links WHERE type = 'depends_on' AND task_id = ?");
+      const seen = new Set();
+      const stack = [to];
+      while (stack.length) {
+        const cur = stack.pop();
+        if (cur === from) throw bad('Không thể tạo phụ thuộc vòng tròn giữa các task');
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        for (const r of next.all(cur)) stack.push(r.id);
+      }
+    }
+
+    db.prepare('INSERT INTO task_links (task_id, other_task_id, type) VALUES (?, ?, ?)').run(from, to, type);
+    res.status(201).json(taskLinks(db, taskId));
+  });
+
+  api.delete('/task-links/:id', (req, res) => {
+    const info = db.prepare('DELETE FROM task_links WHERE id = ?').run(parseId(req.params.id));
+    if (!info.changes) throw new HttpError(404, 'Không tìm thấy liên kết');
+    res.status(204).end();
+  });
 
   // ---- Test runs (lịch sử chạy test case) ----
   api.get('/test-cases/:id/runs', (req, res) => {
@@ -299,7 +429,9 @@ export function createApp(db, { staticDir } = {}) {
       meetings: db
         .prepare('SELECT id, title, meeting_date FROM meetings WHERE project_id = ? ORDER BY meeting_date DESC, id DESC')
         .all(id),
-      tasks: db.prepare('SELECT id, title, status FROM tasks WHERE project_id = ? ORDER BY id DESC').all(id),
+      tasks: db
+        .prepare('SELECT id, title, status, parent_id FROM tasks WHERE project_id = ? ORDER BY id DESC')
+        .all(id),
       testCases: db.prepare('SELECT id, title, status FROM test_cases WHERE project_id = ? ORDER BY id DESC').all(id),
       documents: db
         .prepare('SELECT id, title, type, version, status FROM documents WHERE project_id = ? ORDER BY type, title')

@@ -380,3 +380,136 @@ describe('members & gantt', () => {
     assert.equal(r.body.tasks.length, 3);
   });
 });
+
+describe('meeting attachments', () => {
+  test('tải lên, tải về, xem ảnh, xoá; xoá họp xoá file', async () => {
+    const m = (await req('POST', '/meetings', { project_id: P, title: 'Họp có file', meeting_date: '2026-02-01' })).body;
+    const content = 'Xin chào biên bản ✓';
+    let r = await req('POST', `/meetings/${m.id}/attachments`, {
+      name: 'biên bản/../x.txt',
+      mime_type: 'text/plain',
+      data: Buffer.from(content).toString('base64'),
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.name, 'biên bản_.._x.txt', 'không cho ký tự đường dẫn');
+    assert.equal(r.body.size, Buffer.byteLength(content));
+    const fileId = r.body.id;
+
+    const dl = await fetch(`${base}/attachments/${fileId}/download`);
+    assert.equal(dl.status, 200);
+    assert.equal(await dl.text(), content);
+    assert.match(dl.headers.get('content-disposition'), /^attachment;.*filename\*=UTF-8''/);
+    // file không phải ảnh thì không hiển thị inline
+    const inl = await fetch(`${base}/attachments/${fileId}/download?inline=1`);
+    assert.match(inl.headers.get('content-disposition'), /^attachment/);
+
+    r = await req('GET', `/meetings/${m.id}`);
+    assert.equal(r.body.attachments.length, 1);
+    assert.equal(r.body.attachments[0].data, undefined, 'không trả nội dung trong chi tiết');
+    r = await req('GET', `/meetings?project_id=${P}&q=Họp có file`);
+    assert.equal(r.body.items[0].attachment_count, 1);
+
+    assert.equal((await req('POST', `/meetings/${m.id}/attachments`, { name: 'a', data: '***' })).status, 400);
+    assert.equal((await req('POST', `/meetings/${m.id}/attachments`, { name: 'a', data: '' })).status, 400);
+    assert.equal((await req('POST', '/meetings/99999/attachments', { name: 'a', data: 'YQ==' })).status, 404);
+
+    await req('POST', `/meetings/${m.id}/attachments`, { name: 'b.png', mime_type: 'image/png', data: 'iVBORw0KGgo=' });
+    await req('DELETE', `/attachments/${fileId}`);
+    assert.equal((await fetch(`${base}/attachments/${fileId}/download`)).status, 404);
+    await req('DELETE', `/meetings/${m.id}`);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM meeting_attachments WHERE meeting_id = ?').get(m.id).n, 0);
+  });
+
+  test('giới hạn dung lượng file', async () => {
+    const small = createApp(db, { maxUploadBytes: 10 }).listen(0);
+    await new Promise((r) => small.once('listening', r));
+    try {
+      const m = (await req('POST', '/meetings', { project_id: P, title: 'Giới hạn', meeting_date: '2026-02-01' })).body;
+      const res = await fetch(`http://127.0.0.1:${small.address().port}/api/meetings/${m.id}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'big.bin', data: Buffer.alloc(11).toString('base64') }),
+      });
+      assert.equal(res.status, 400);
+      assert.match((await res.json()).details.data, /vượt quá/);
+    } finally {
+      small.close();
+    }
+  });
+});
+
+describe('subtasks & task links', () => {
+  test('subtask 1 cấp, tiến độ, xoá task cha xoá subtask', async () => {
+    const parent = (await req('POST', '/tasks', { project_id: P, title: 'Cha' })).body.id;
+    const s1 = (await req('POST', '/tasks', { project_id: P, title: 'ZqSub 1', parent_id: parent, status: 'done' })).body.id;
+    await req('POST', '/tasks', { project_id: P, title: 'ZqSub 2', parent_id: parent });
+
+    let r = await req('GET', `/tasks/${parent}`);
+    assert.equal(r.body.subtasks.length, 2);
+    r = await req('GET', `/tasks?project_id=${P}&q=Cha`);
+    const row = r.body.items.find((t) => t.id === parent);
+    assert.equal(row.subtask_count, 2);
+    assert.equal(row.subtask_done_count, 1);
+    r = await req('GET', `/tasks/${s1}`);
+    assert.equal(r.body.parent.id, parent);
+    r = await req('GET', `/tasks?project_id=${P}&parent_id=none&q=ZqSub`);
+    assert.equal(r.body.total, 0, 'lọc chỉ task cấp cao nhất');
+
+    r = await req('POST', '/tasks', { project_id: P, title: 'Cháu', parent_id: s1 });
+    assert.equal(r.status, 400, 'không hỗ trợ subtask nhiều cấp');
+    const other = (await req('POST', '/tasks', { project_id: P, title: 'Khác' })).body.id;
+    r = await req('PATCH', `/tasks/${parent}`, { parent_id: other });
+    assert.equal(r.status, 400, 'task có subtask không thành subtask');
+    r = await req('PATCH', `/tasks/${other}`, { parent_id: other });
+    assert.equal(r.status, 400);
+    const otherProject = (await req('POST', '/tasks', { project_id: P2, title: 'P2' })).body.id;
+    r = await req('POST', '/tasks', { project_id: P, title: 'x', parent_id: otherProject });
+    assert.equal(r.status, 400);
+
+    await req('DELETE', `/tasks/${parent}`);
+    assert.equal((await req('GET', `/tasks/${s1}`)).status, 404);
+  });
+
+  test('phụ thuộc, đang chặn, liên quan; chặn vòng tròn', async () => {
+    const mk = async (title) => (await req('POST', '/tasks', { project_id: P, title })).body.id;
+    const a = await mk('A');
+    const b = await mk('B');
+    const c = await mk('C');
+
+    let r = await req('POST', `/tasks/${a}/links`, { other_task_id: b, type: 'depends_on' });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.depends_on[0].id, b);
+    // "C chặn A" = A phụ thuộc C
+    r = await req('POST', `/tasks/${c}/links`, { other_task_id: a, type: 'blocks' });
+    assert.equal(r.body.blocks[0].id, a);
+    r = await req('GET', `/tasks/${a}`);
+    assert.deepEqual(r.body.links.depends_on.map((x) => x.id).sort(), [b, c].sort());
+    assert.equal((await req('GET', `/tasks/${b}`)).body.links.blocks[0].id, a);
+
+    r = await req('GET', `/tasks?project_id=${P}&q=A`);
+    assert.equal(r.body.items.find((t) => t.id === a).blocked_by_count, 2);
+    await req('PATCH', `/tasks/${b}`, { status: 'done' });
+    r = await req('GET', `/tasks?project_id=${P}&q=A`);
+    assert.equal(r.body.items.find((t) => t.id === a).blocked_by_count, 1);
+
+    // vòng tròn: B phụ thuộc A (A đã phụ thuộc B) -> từ chối; gián tiếp: C -> ... cũng vậy
+    assert.equal((await req('POST', `/tasks/${b}/links`, { other_task_id: a, type: 'depends_on' })).status, 400);
+    assert.equal((await req('POST', `/tasks/${a}/links`, { other_task_id: b, type: 'depends_on' })).status, 400, 'trùng');
+    const d = await mk('D');
+    await req('POST', `/tasks/${d}/links`, { other_task_id: a, type: 'depends_on' }); // D -> A -> B
+    assert.equal((await req('POST', `/tasks/${b}/links`, { other_task_id: d, type: 'depends_on' })).status, 400);
+
+    r = await req('POST', `/tasks/${a}/links`, { other_task_id: d, type: 'relates' });
+    assert.equal(r.status, 201);
+    assert.equal((await req('POST', `/tasks/${d}/links`, { other_task_id: a, type: 'relates' })).status, 400, 'trùng chiều ngược');
+    assert.equal((await req('GET', `/tasks/${d}`)).body.links.relates[0].id, a);
+    assert.equal((await req('POST', `/tasks/${a}/links`, { other_task_id: a, type: 'relates' })).status, 400);
+    const p2Task = (await req('POST', '/tasks', { project_id: P2, title: 'P2 link' })).body.id;
+    assert.equal((await req('POST', `/tasks/${a}/links`, { other_task_id: p2Task, type: 'relates' })).status, 400);
+
+    const linkId = r.body.relates[0].link_id;
+    assert.equal((await req('DELETE', `/task-links/${linkId}`)).status, 204);
+    await req('DELETE', `/tasks/${c}`);
+    assert.equal((await req('GET', `/tasks/${a}`)).body.links.depends_on.length, 1);
+  });
+});

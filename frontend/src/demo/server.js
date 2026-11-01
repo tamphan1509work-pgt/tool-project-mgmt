@@ -5,7 +5,9 @@ import { openDb } from '../../../backend/src/db.js';
 import { seed } from '../../../backend/src/seed.js';
 import { setInitialData } from './shims/node-sqlite.js';
 
-const STORAGE_KEY = 'project-hub-demo-db-v3';
+const STORAGE_KEY = 'project-hub-demo-db-v4';
+// localStorage của trình duyệt chỉ chứa được vài MB nên giới hạn file đính kèm nhỏ hơn bản thật
+export const DEMO_MAX_UPLOAD = 1.5 * 1024 * 1024;
 
 const toBase64 = (bytes) => {
   let s = '';
@@ -41,7 +43,7 @@ function boot(data) {
     seed(db);
     persist();
   }
-  app = createApp(db);
+  app = createApp(db, { maxUploadBytes: DEMO_MAX_UPLOAD });
 }
 
 try {
@@ -75,15 +77,19 @@ export async function demoFetch(url, init = {}) {
   const result = await new Promise((resolve) => {
     const res = {
       statusCode: 200,
+      headers: {},
       status(code) {
         this.statusCode = code;
         return this;
       },
+      setHeader(name, value) {
+        this.headers[name] = value;
+      },
       json(data) {
         resolve({ status: this.statusCode, body: data });
       },
-      end() {
-        resolve({ status: this.statusCode, body: null });
+      end(bytes) {
+        resolve({ status: this.statusCode, body: null, bytes, headers: this.headers });
       },
       sendFile() {
         resolve({ status: 404, body: null });
@@ -97,6 +103,7 @@ export async function demoFetch(url, init = {}) {
 
   if (method !== 'GET' && result.status < 400) persist();
 
+  if (result.bytes) return new Response(result.bytes, { status: result.status, headers: result.headers });
   return result.body === null
     ? new Response(null, { status: result.status })
     : new Response(JSON.stringify(result.body), {

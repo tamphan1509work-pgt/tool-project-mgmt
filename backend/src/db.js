@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_date       TEXT,
   estimate_hours REAL,
   meeting_id     INTEGER REFERENCES meetings(id) ON DELETE SET NULL,
+  parent_id      INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
   completed_at   TEXT,
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
@@ -137,6 +138,29 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- File đính kèm biên bản họp (nội dung lưu trong DB)
+CREATE TABLE IF NOT EXISTS meeting_attachments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  meeting_id  INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  mime_type   TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size        INTEGER NOT NULL,
+  data        BLOB NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_meeting_attachments_meeting ON meeting_attachments(meeting_id);
+
+-- Liên kết giữa các task: depends_on (task_id phụ thuộc other_task_id) hoặc relates (liên quan)
+CREATE TABLE IF NOT EXISTS task_links (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id        INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  other_task_id  INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  type           TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (task_id, other_task_id, type)
+);
+CREATE INDEX IF NOT EXISTS idx_task_links_other ON task_links(other_task_id);
+
 -- Liên kết nhiều-nhiều giữa task và tài liệu
 CREATE TABLE IF NOT EXISTS task_documents (
   task_id      INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -155,6 +179,11 @@ const SCOPED_TABLES = ['meetings', 'tasks', 'test_cases', 'bugs', 'documents'];
 function migrate(db) {
   const memberCols = db.prepare('PRAGMA table_info(members)').all().map((c) => c.name);
   if (!memberCols.includes('position')) db.exec('ALTER TABLE members ADD COLUMN position TEXT');
+  const taskCols = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
+  if (!taskCols.includes('parent_id')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
 
   for (const table of SCOPED_TABLES) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);

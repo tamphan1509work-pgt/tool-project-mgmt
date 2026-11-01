@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import Attachments from '../components/Attachments.jsx';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import ResourceList from '../components/ResourceList.jsx';
 import { Badge, Icon, Prose } from '../components/ui.jsx';
@@ -32,6 +33,13 @@ export function MeetingList() {
         { key: 'title', title: 'Tiêu đề', sort: 'title', render: (m) => <strong>{m.title}</strong> },
         { key: 'facilitator', title: 'Chủ trì', width: 160 },
         { key: 'location', title: 'Địa điểm', width: 160, className: 'muted' },
+        {
+          key: 'attachment_count',
+          title: 'Tệp',
+          width: 70,
+          className: 'num',
+          render: (m) => (m.attachment_count ? <span title="Số file đính kèm">📎 {m.attachment_count}</span> : ''),
+        },
       ]}
     />
   );
@@ -180,6 +188,7 @@ export function MeetingDetail() {
             <Section title="Quyết định / Kết luận">
               <Prose text={m.decisions} />
             </Section>
+            <Attachments meeting={m} reload={reload} />
             <ActionItems meeting={m} reload={reload} />
           </div>
           <aside className="detail-side">

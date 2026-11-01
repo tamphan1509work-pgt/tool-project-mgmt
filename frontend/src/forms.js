@@ -40,7 +40,15 @@ export const taskFields = [
   { name: 'estimate_hours', label: 'Ước lượng (giờ)', type: 'number' },
   { name: 'start_date', label: 'Ngày bắt đầu', type: 'date' },
   { name: 'due_date', label: 'Hạn hoàn thành', type: 'date' },
-  { name: 'meeting_id', label: 'Từ cuộc họp', type: 'ref', source: 'meetings', full: true },
+  { name: 'meeting_id', label: 'Từ cuộc họp', type: 'ref', source: 'meetings' },
+  {
+    name: 'parent_id',
+    label: 'Là subtask của (task cha)',
+    type: 'ref',
+    source: 'tasks',
+    // chỉ task cấp cao nhất mới làm task cha được, và không chọn chính nó
+    filter: (t, record) => !t.parent_id && t.id !== record?.id,
+  },
   { name: 'description', label: 'Mô tả', type: 'textarea', rows: 5 },
   {
     name: 'document_ids',

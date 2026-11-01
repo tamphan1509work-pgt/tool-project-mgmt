@@ -8,6 +8,7 @@ export const ENUMS = {
   testResult: ['passed', 'failed', 'blocked'],
   bugSeverity: ['minor', 'major', 'critical', 'blocker'],
   bugStatus: ['new', 'in_progress', 'resolved', 'closed', 'reopened', 'rejected'],
+  taskLinkType: ['depends_on', 'blocks', 'relates'],
   projectStatus: ['planning', 'active', 'on_hold', 'completed', 'cancelled'],
   memberRole: ['pm', 'ba', 'tech_lead', 'developer', 'tester', 'designer', 'devops', 'stakeholder'],
   documentType: ['design', 'specification'],
@@ -56,8 +57,14 @@ export const meetings = {
       params.push(query.to);
     }
   },
+  selectExtra: '(SELECT COUNT(*) FROM meeting_attachments a WHERE a.meeting_id = meetings.id) AS attachment_count',
   expand(db, row) {
     return {
+      attachments: db
+        .prepare(
+          'SELECT id, name, mime_type, size, created_at FROM meeting_attachments WHERE meeting_id = ? ORDER BY id',
+        )
+        .all(row.id),
       action_items: db
         .prepare('SELECT id, title, status, priority, assignee, due_date FROM tasks WHERE meeting_id = ? ORDER BY id')
         .all(row.id),
@@ -79,6 +86,7 @@ export const tasks = {
     due_date: { type: 'date' },
     estimate_hours: { type: 'number' },
     meeting_id: { type: 'ref', table: 'meetings', sameProject: true },
+    parent_id: { type: 'ref', table: 'tasks', sameProject: true },
     document_ids: {
       type: 'refs',
       table: 'documents',
@@ -88,8 +96,14 @@ export const tasks = {
       sameProject: true,
     },
   },
+  selectExtra: `
+    (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = tasks.id) AS subtask_count,
+    (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = tasks.id AND s.status = 'done') AS subtask_done_count,
+    (SELECT pt.title FROM tasks pt WHERE pt.id = tasks.parent_id) AS parent_title,
+    (SELECT COUNT(*) FROM task_links l JOIN tasks o ON o.id = l.other_task_id
+       WHERE l.task_id = tasks.id AND l.type = 'depends_on' AND o.status <> 'done') AS blocked_by_count`,
   searchable: ['title', 'description', 'assignee'],
-  filterable: ['project_id', 'status', 'priority', 'assignee', 'meeting_id'],
+  filterable: ['project_id', 'status', 'priority', 'assignee', 'meeting_id', 'parent_id'],
   sortable: {
     due_date: "COALESCE(due_date, '9999-12-31')",
     priority: rank('priority', ENUMS.priority),
@@ -104,7 +118,17 @@ export const tasks = {
       params.push(today());
     }
   },
-  beforeSave(data, existing) {
+  beforeSave(data, existing, db) {
+    // Subtask: chỉ hỗ trợ 1 cấp (task cha không được là subtask, task có subtask không thể thành subtask)
+    if (data.parent_id != null) {
+      const err = (msg) => new HttpError(400, 'Dữ liệu không hợp lệ', { parent_id: msg });
+      if (existing && data.parent_id === existing.id) throw err('Task không thể là task cha của chính nó');
+      const parent = db.prepare('SELECT parent_id FROM tasks WHERE id = ?').get(data.parent_id);
+      if (parent?.parent_id) throw err('Task được chọn đã là subtask (chỉ hỗ trợ subtask 1 cấp)');
+      if (existing && db.prepare('SELECT 1 FROM tasks WHERE parent_id = ?').get(existing.id)) {
+        throw err('Task này đang có subtask nên không thể trở thành subtask');
+      }
+    }
     if (data.start_date !== undefined || data.due_date !== undefined) {
       const start = data.start_date !== undefined ? data.start_date : existing?.start_date;
       const due = data.due_date !== undefined ? data.due_date : existing?.due_date;
@@ -130,9 +154,44 @@ export const tasks = {
         .prepare('SELECT id, title, status, severity FROM bugs WHERE task_id = ? ORDER BY id')
         .all(row.id),
       ...linkedDocuments(db, row.id),
+      parent: row.parent_id
+        ? db.prepare('SELECT id, title, status FROM tasks WHERE id = ?').get(row.parent_id) ?? null
+        : null,
+      subtasks: db
+        .prepare(
+          'SELECT id, title, status, priority, assignee, due_date FROM tasks WHERE parent_id = ? ORDER BY id',
+        )
+        .all(row.id),
+      links: taskLinks(db, row.id),
     };
   },
 };
+
+/** Các liên kết của task, chia theo chiều: phụ thuộc vào / đang chặn / liên quan */
+export function taskLinks(db, taskId) {
+  const cols = 'l.id AS link_id, t.id, t.title, t.status, t.assignee, t.due_date';
+  return {
+    depends_on: db
+      .prepare(
+        `SELECT ${cols} FROM task_links l JOIN tasks t ON t.id = l.other_task_id
+         WHERE l.task_id = ? AND l.type = 'depends_on' ORDER BY t.id`,
+      )
+      .all(taskId),
+    blocks: db
+      .prepare(
+        `SELECT ${cols} FROM task_links l JOIN tasks t ON t.id = l.task_id
+         WHERE l.other_task_id = ? AND l.type = 'depends_on' ORDER BY t.id`,
+      )
+      .all(taskId),
+    relates: db
+      .prepare(
+        `SELECT ${cols} FROM task_links l
+         JOIN tasks t ON t.id = CASE WHEN l.task_id = ? THEN l.other_task_id ELSE l.task_id END
+         WHERE (l.task_id = ? OR l.other_task_id = ?) AND l.type = 'relates' ORDER BY t.id`,
+      )
+      .all(taskId, taskId, taskId),
+  };
+}
 
 export const testCases = {
   table: 'test_cases',

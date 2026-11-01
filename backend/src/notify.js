@@ -1,5 +1,5 @@
 // Thông báo trễ / sắp đến deadline: trên web (chuông thông báo) và qua email (tổng hợp hằng ngày).
-import { HttpError, today as localToday } from './resource.js';
+import { HttpError, splitPeople, today as localToday } from './resource.js';
 
 export const DEFAULT_SETTINGS = {
   web_enabled: true, // hiện chuông thông báo trên web
@@ -147,8 +147,9 @@ export function buildEmailDigests(db, settings, { today = localToday(), appUrl =
     .filter(Boolean);
 
   for (const it of items) {
-    if (settings.email_to_assignee && it.type === 'task' && it.assignee) {
-      const m = byName.get(it.assignee.trim().toLowerCase());
+    // Gửi cho từng PIC của task
+    for (const name of settings.email_to_assignee && it.type === 'task' ? splitPeople(it.assignee) : []) {
+      const m = byName.get(name.toLowerCase());
       if (m?.email && m.email_notifications) add(m.email, m.name, it);
     }
     if (settings.email_to_pm) {

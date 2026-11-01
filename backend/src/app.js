@@ -2,9 +2,10 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { transaction } from './db.js';
-import { createResource, HttpError, parseId, today, validate } from './resource.js';
+import { createResource, HttpError, parseId, splitPeople, today, validate } from './resource.js';
 import {
   ASSIGNED,
+  INVOLVED,
   bugs,
   categories,
   documents,
@@ -625,8 +626,9 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
        WHERE pm.member_id = ? ${projectId ? 'AND p.id = ?' : ''} ORDER BY COALESCE(p.start_date, ''), p.name`,
     );
     const memberTasks = db.prepare(
-      `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.completed_at, t.created_at, t.project_id
-       FROM tasks t WHERE ${ASSIGNED('t.assignee', '?')}
+      `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.completed_at, t.created_at, t.project_id,
+         CASE WHEN ${ASSIGNED('t.assignee', '?')} THEN 'pic' ELSE 'support' END AS involvement
+       FROM tasks t WHERE ${INVOLVED('t', '?')}
        ${projectId ? 'AND t.project_id = ?' : ''} ${includeDone ? '' : "AND t.status NOT IN ('released', 'canceled')"}
        ORDER BY COALESCE(t.start_date, t.due_date, substr(t.created_at, 1, 10)), t.id`,
     );
@@ -634,7 +636,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
     const members = people.map((m) => {
       const projects = memberProjects.all(...(projectId ? [m.id, projectId] : [m.id]));
-      const tasks = memberTasks.all(...(projectId ? [m.name, projectId] : [m.name]));
+      const tasks = memberTasks.all(...(projectId ? [m.name, m.name, m.name, projectId] : [m.name, m.name, m.name]));
       // Task được giao ở dự án mà người này chưa là thành viên: vẫn hiển thị dự án (không có vai trò)
       for (const pid of new Set(tasks.map((t) => t.project_id))) {
         if (!projects.some((p) => p.id === pid)) projects.push({ ...projectById.get(pid), role: null });
@@ -1002,18 +1004,20 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
       });
     }
     const { id } = projectFor(req);
-    const people = db
+    // Tên người đã dùng trong dự án (PIC / Hỗ trợ là danh sách "A, B" nên tách ra)
+    const raw = db
       .prepare(
-        `SELECT DISTINCT name FROM (
-           SELECT m.name AS name FROM project_members pm JOIN members m ON m.id = pm.member_id WHERE pm.project_id = ? UNION
-           SELECT assignee FROM tasks WHERE project_id = ? UNION
-           SELECT assignee FROM bugs WHERE project_id = ? UNION
-           SELECT reporter FROM bugs WHERE project_id = ? UNION
-           SELECT facilitator FROM meetings WHERE project_id = ?
-         ) WHERE name IS NOT NULL AND name <> '' ORDER BY name`,
+        `SELECT m.name AS name FROM project_members pm JOIN members m ON m.id = pm.member_id WHERE pm.project_id = ? UNION
+         SELECT assignee FROM tasks WHERE project_id = ? UNION SELECT supporters FROM tasks WHERE project_id = ? UNION
+         SELECT assignee FROM bugs WHERE project_id = ? UNION SELECT supporters FROM bugs WHERE project_id = ? UNION
+         SELECT assignee FROM test_cases WHERE project_id = ? UNION SELECT supporters FROM test_cases WHERE project_id = ? UNION
+         SELECT reporter FROM bugs WHERE project_id = ? UNION
+         SELECT facilitator FROM meetings WHERE project_id = ?`,
       )
-      .all(id, id, id, id, id)
-      .map((r) => r.name);
+      .all(id, id, id, id, id, id, id, id, id);
+    const byKey = new Map();
+    for (const r of raw) for (const n of splitPeople(r.name)) if (!byKey.has(n.toLowerCase())) byKey.set(n.toLowerCase(), n);
+    const people = [...byKey.values()].sort((a, b) => a.localeCompare(b, 'vi'));
     res.json({
       projects: allProjects,
       allMembers,

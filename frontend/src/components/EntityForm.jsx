@@ -1,11 +1,12 @@
 import { useId, useState } from 'react';
+import PeoplePicker from './PeoplePicker.jsx';
 import { useLookup } from '../context.jsx';
 import { code, label } from '../constants.js';
 import { FilePicker } from './Attachments.jsx';
 import { categoryTree } from '../categories.js';
 import DocumentsField from './DocumentsField.jsx';
 import RichTextEditor from './RichText.jsx';
-import { AvatarField } from './Avatar.jsx';
+import { AvatarField, splitPeople } from './Avatar.jsx';
 
 const REF_RESOURCE = {
   meetings: 'meetings',
@@ -90,6 +91,8 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
         </select>
       );
     }
+    case 'people':
+      return <PeoplePicker id={id} value={value} onChange={onChange} placeholder={field.placeholder} />;
     case 'avatar':
       return <AvatarField id={id} value={value} onChange={onChange} name={record?.name} />;
     case 'richtext':
@@ -177,7 +180,10 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
   const [values, setValues] = useState(() => {
     const v = {};
     for (const f of fields)
-      v[f.name] = initial[f.name] ?? f.default ?? (['multiref', 'files', 'documents'].includes(f.type) ? [] : '');
+      v[f.name] =
+        f.type === 'people'
+          ? splitPeople(initial[f.name] ?? f.default)
+          : (initial[f.name] ?? f.default ?? (['multiref', 'files', 'documents'].includes(f.type) ? [] : ''));
     return v;
   });
   const [errors, setErrors] = useState({});
@@ -192,7 +198,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
     const data = {};
     for (const f of fields) {
       const v = values[f.name];
-      if (['multiref', 'files', 'documents'].includes(f.type)) {
+      if (['multiref', 'files', 'documents', 'people'].includes(f.type)) {
         data[f.name] = v ?? [];
         continue;
       }

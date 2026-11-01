@@ -1,5 +1,5 @@
 import Comments from '../components/Comments.jsx';
-import { PersonAvatar } from '../components/Avatar.jsx';
+import { PeopleAvatars, PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import { Link } from 'react-router-dom';
@@ -36,7 +36,8 @@ export function BugList() {
       filters={[
         { name: 'severity', label: 'Mức độ', options: options('bugSeverity') },
         { name: 'priority', label: 'Ưu tiên', options: options('priority') },
-        { name: 'assignee', label: 'Người xử lý', source: 'people' },
+        { name: 'assignee', label: 'PIC', source: 'people' },
+        { name: 'supporters', label: 'Hỗ trợ', source: 'people' },
         categoryFilter,
         { name: 'open', label: 'Chỉ bug đang mở', type: 'toggle' },
       ]}
@@ -66,10 +67,13 @@ export function BugList() {
         { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
         {
           key: 'assignee',
-          title: 'Người xử lý',
-          width: 150,
-          render: (b) => b.assignee || <span className="muted">Chưa giao</span>,
+          title: 'PIC',
+          sort: 'assignee',
+          width: 110,
+          className: 'nowrap',
+          render: (b) => <PeopleAvatars value={b.assignee} empty={<span className="muted">Chưa giao</span>} />,
         },
+        { key: 'supporters', title: 'Hỗ trợ', width: 110, render: (b) => <PeopleAvatars value={b.supporters} /> },
         { key: 'reporter', title: 'Người báo bug', sort: 'reporter', width: 140, className: 'nowrap' },
         {
           key: 'created_by',
@@ -144,7 +148,8 @@ export function BugDetail() {
               <InfoList
                 items={[
                   ['Danh mục', <CategoryBadge key="c" id={b.category_id} full />],
-                  ['Người xử lý', b.assignee],
+                  ['PIC', b.assignee && <PeopleAvatars key="pic" value={b.assignee} size={24} showName />],
+                  ['Hỗ trợ', b.supporters && <PeopleAvatars key="sp" value={b.supporters} size={24} showName />],
                   ['Người báo bug', b.reporter],
                   ['Người tạo', b.created_by],
                   ['Thời gian tạo', fmtDateTime(b.created_at)],

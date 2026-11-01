@@ -1,4 +1,4 @@
-import { HttpError, today } from './resource.js';
+import { HAS_PERSON, HttpError, splitPeople, today } from './resource.js';
 
 export const ENUMS = {
   priority: ['low', 'medium', 'high', 'critical'],
@@ -28,7 +28,10 @@ const rank = (col, values) =>
 const timestamps = { created_at: 'created_at', updated_at: 'updated_at' };
 
 /** Task được giao cho một người: so khớp theo tên (bỏ khoảng trắng thừa, không phân biệt hoa thường) */
-export const ASSIGNED = (col, nameExpr) => `lower(trim(${col})) = lower(trim(${nameExpr}))`;
+export const ASSIGNED = (col, nameExpr) => HAS_PERSON(col, nameExpr);
+/** Người này là PIC hoặc Hỗ trợ của task (alias: bí danh bảng tasks) */
+export const INVOLVED = (alias, nameExpr) =>
+  `(${HAS_PERSON(`${alias}.assignee`, nameExpr)} OR ${HAS_PERSON(`${alias}.supporters`, nameExpr)})`;
 
 const commentCount = (db, entity, id) =>
   db.prepare('SELECT COUNT(*) AS n FROM comments WHERE entity = ? AND entity_id = ?').get(entity, id).n;
@@ -92,7 +95,8 @@ export const tasks = {
     description: { type: 'html', max: 6_000_000 }, // HTML từ trình soạn thảo (có thể chứa ảnh)
     status: { type: 'enum', values: ENUMS.taskStatus, default: 'todo' },
     priority: { type: 'enum', values: ENUMS.priority, default: 'medium' },
-    assignee: { type: 'string' }, // PIC
+    assignee: { type: 'people' }, // PIC (nhiều người)
+    supporters: { type: 'people' }, // Hỗ trợ (nhiều người)
     requester: { type: 'string' },
     start_date: { type: 'date' },
     due_date: { type: 'date' },
@@ -119,8 +123,8 @@ export const tasks = {
   trackCreator: true,
   countBy: 'status',
   commentable: true,
-  searchable: ['title', 'description', 'assignee', 'requester', 'created_by'],
-  filterable: ['project_id', 'status', 'priority', 'assignee', 'requester', 'meeting_id', 'parent_id', 'milestone_id'],
+  searchable: ['title', 'description', 'assignee', 'supporters', 'requester', 'created_by'],
+  filterable: ['project_id', 'status', 'priority', 'requester', 'meeting_id', 'parent_id', 'milestone_id'],
   sortable: {
     due_date: "COALESCE(due_date, '9999-12-31')",
     priority: rank('priority', ENUMS.priority),
@@ -233,11 +237,13 @@ export const testCases = {
     steps: { type: 'text' },
     expected_result: { type: 'text' },
     task_id: { type: 'ref', table: 'tasks', sameProject: true },
+    assignee: { type: 'people' }, // PIC
+    supporters: { type: 'people' }, // Hỗ trợ
   },
   trackCreator: true,
   commentable: true,
   countBy: 'status',
-  searchable: ['title', 'module', 'steps', 'expected_result'],
+  searchable: ['title', 'module', 'steps', 'expected_result', 'assignee', 'supporters'],
   filterable: ['project_id', 'status', 'priority', 'type', 'module', 'task_id'],
   sortable: {
     priority: rank('priority', ENUMS.priority),
@@ -245,6 +251,7 @@ export const testCases = {
     module: "COALESCE(module, '')",
     title: 'title',
     last_run_at: "COALESCE(last_run_at, '')",
+    assignee: "COALESCE(assignee, '')",
     id: 'id',
     created_by: "COALESCE(created_by, '')",
     ...timestamps,
@@ -299,7 +306,8 @@ export const bugs = {
     severity: { type: 'enum', values: ENUMS.bugSeverity, default: 'major' },
     priority: { type: 'enum', values: ENUMS.priority, default: 'medium' },
     status: { type: 'enum', values: ENUMS.bugStatus, default: 'new' },
-    assignee: { type: 'string' },
+    assignee: { type: 'people' }, // PIC
+    supporters: { type: 'people' }, // Hỗ trợ
     reporter: { type: 'string' },
     test_case_id: { type: 'ref', table: 'test_cases', sameProject: true },
     task_id: { type: 'ref', table: 'tasks', sameProject: true },
@@ -307,12 +315,13 @@ export const bugs = {
   trackCreator: true,
   commentable: true,
   countBy: 'status',
-  searchable: ['title', 'description', 'steps_to_reproduce', 'actual_result', 'environment', 'assignee', 'reporter'],
-  filterable: ['project_id', 'status', 'severity', 'priority', 'assignee', 'test_case_id', 'task_id'],
+  searchable: ['title', 'description', 'steps_to_reproduce', 'actual_result', 'environment', 'assignee', 'supporters', 'reporter'],
+  filterable: ['project_id', 'status', 'severity', 'priority', 'test_case_id', 'task_id'],
   sortable: {
     severity: rank('severity', ENUMS.bugSeverity),
     priority: rank('priority', ENUMS.priority),
     status: rank('status', ENUMS.bugStatus),
+    assignee: "COALESCE(assignee, '')",
     title: 'title',
     created_by: "COALESCE(created_by, '')",
     reporter: "COALESCE(reporter, '')",
@@ -549,8 +558,8 @@ export const members = {
     (SELECT a.is_admin FROM accounts a WHERE a.member_id = members.id) AS is_admin,
     (SELECT a.disabled FROM accounts a WHERE a.member_id = members.id) AS account_disabled,
     (SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count,
-    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status NOT IN ('released', 'canceled')) AS open_task_count,
-    (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status NOT IN ('released', 'canceled')
+    (SELECT COUNT(*) FROM tasks t WHERE ${INVOLVED('t', 'members.name')} AND t.status NOT IN ('released', 'canceled')) AS open_task_count,
+    (SELECT COUNT(*) FROM tasks t WHERE ${INVOLVED('t', 'members.name')} AND t.status NOT IN ('released', 'canceled')
        AND t.due_date < date('now', 'localtime')) AS overdue_task_count`,
   searchable: ['name', 'email', 'phone', 'position'],
   // ?status=active|inactive (đăng nhập được hay không), ?role=admin|member
@@ -583,12 +592,13 @@ export const members = {
         .all(row.id),
       tasks: db
         .prepare(
-          `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.project_id, p.code AS project_code
+          `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.project_id, p.code AS project_code,
+             CASE WHEN ${ASSIGNED('t.assignee', '?')} THEN 'pic' ELSE 'support' END AS involvement
            FROM tasks t JOIN projects p ON p.id = t.project_id
-           WHERE ${ASSIGNED('t.assignee', '?')}
+           WHERE ${INVOLVED('t', '?')}
            ORDER BY t.status IN ('released', 'canceled'), COALESCE(t.due_date, '9999-12-31'), t.id`,
         )
-        .all(row.name),
+        .all(row.name, row.name, row.name),
     };
   },
   beforeSave(data, existing, db, req) {
@@ -612,9 +622,22 @@ export const members = {
   // Đổi tên thành viên -> cập nhật tên ở các nơi đang ghi tên người này
   afterUpdate(db, row, existing) {
     if (row.name === existing.name) return;
+    // Danh sách nhiều người (PIC, Hỗ trợ): thay đúng tên cũ trong danh sách
     for (const [table, col] of [
       ['tasks', 'assignee'],
+      ['tasks', 'supporters'],
       ['bugs', 'assignee'],
+      ['bugs', 'supporters'],
+      ['test_cases', 'assignee'],
+      ['test_cases', 'supporters'],
+    ]) {
+      const old = existing.name.trim().toLowerCase();
+      const upd = db.prepare(`UPDATE ${table} SET ${col} = ? WHERE id = ?`);
+      for (const r of db.prepare(`SELECT id, ${col} AS v FROM ${table} WHERE ${HAS_PERSON(col, '?')}`).all(existing.name)) {
+        upd.run(splitPeople(r.v).map((n) => (n.toLowerCase() === old ? row.name : n)).join(', '), r.id);
+      }
+    }
+    for (const [table, col] of [
       ['bugs', 'reporter'],
       ['meetings', 'facilitator'],
       ['test_runs', 'executed_by'],

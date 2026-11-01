@@ -18,6 +18,14 @@ export function today() {
   return new Date().toLocaleDateString('sv');
 }
 
+/** SQL: danh sách tên "A, B" (cột col) có chứa người nameExpr (không phân biệt hoa thường, bỏ khoảng trắng thừa) */
+export const HAS_PERSON = (col, nameExpr) =>
+  `instr(',' || lower(replace(COALESCE(${col}, ''), ', ', ',')) || ',', ',' || lower(trim(${nameExpr})) || ',') > 0`;
+
+/** "A, B" -> ['A', 'B'] */
+export const splitPeople = (v) =>
+  typeof v === 'string' ? v.split(',').map((x) => x.trim()).filter(Boolean) : [];
+
 export function parseId(raw) {
   const id = Number(raw);
   if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'ID không hợp lệ');
@@ -112,6 +120,25 @@ export function validate(db, fields, body, { partial = false } = {}) {
           continue;
         }
         v = ids;
+        break;
+      }
+      case 'people': {
+        // Nhiều người (PIC, Hỗ trợ): mảng tên hoặc chuỗi "A, B" -> lưu "A, B" (bỏ trùng, không phân biệt hoa thường)
+        const list = (Array.isArray(v) ? v : String(v).split(','))
+          .map((x) => (typeof x === 'string' ? x.replace(/,/g, ' ').trim().replace(/\s+/g, ' ') : ''))
+          .filter(Boolean);
+        const seen = new Set();
+        const names = list.filter((n) => !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()));
+        if (names.some((n) => n.length > 100) || names.length > 30) {
+          errors[name] = 'Tối đa 30 người, mỗi tên tối đa 100 ký tự';
+          continue;
+        }
+        if (!names.length) {
+          if (f.required) errors[name] = 'Trường này là bắt buộc';
+          else out[name] = null;
+          continue;
+        }
+        v = names.join(', ');
         break;
       }
       case 'avatar':
@@ -319,6 +346,17 @@ export function createResource(db, cfg) {
           WITH RECURSIVE sub(id) AS (SELECT ? UNION ALL SELECT c.id FROM categories c JOIN sub ON c.parent_id = sub.id)
           SELECT id FROM sub)`);
         params.push(Number(cat) || 0);
+      }
+    }
+    // Field nhiều người (PIC, Hỗ trợ): ?assignee=Tên -> có người này trong danh sách; ?assignee=none -> chưa có ai
+    for (const [name, f] of Object.entries(cfg.fields)) {
+      if (f.type !== 'people') continue;
+      const raw = query[name];
+      if (typeof raw !== 'string' || raw === '') continue;
+      if (raw === 'none') where.push(`(${name} IS NULL OR ${name} = '')`);
+      else {
+        where.push(HAS_PERSON(name, '?'));
+        params.push(raw);
       }
     }
     cfg.extraFilters?.(query, where, params);

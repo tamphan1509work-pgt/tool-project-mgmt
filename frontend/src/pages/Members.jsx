@@ -595,7 +595,10 @@ export function MemberDetail() {
                               <td className="mono">
                                 <Link to={`/tasks/${t.id}`}>{code('tasks', t.id)}</Link>
                               </td>
-                              <td className={isClosed(t.status) ? 'strike' : ''}>{t.title}</td>
+                              <td>
+                                <span className={isClosed(t.status) ? 'strike' : ''}>{t.title}</span>
+                                {t.involvement === 'support' && <span className="badge badge-gray inline-tag">Hỗ trợ</span>}
+                              </td>
                               <td className="mono small">{t.project_code}</td>
                               <td>
                                 <Badge kind="taskStatus" value={t.status} />

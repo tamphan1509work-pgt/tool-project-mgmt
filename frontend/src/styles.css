@@ -941,3 +941,28 @@ input:focus, select:focus, textarea:focus {
 }
 .mention-list button:hover { background: var(--surface-2); }
 .mention-excerpt { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Nhiều người: PIC / Hỗ trợ */
+.people-stack { display: inline-flex; align-items: center; }
+.people-stack > .person-avatar + .person-avatar,
+.people-stack > .people-more { margin-left: -7px; }
+.people-stack .avatar-img, .people-stack .avatar-initials { box-shadow: 0 0 0 2px var(--surface); }
+.people-more {
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; box-shadow: 0 0 0 2px var(--surface);
+}
+.people-list { display: inline-flex; flex-direction: column; gap: 6px; }
+.people-picker {
+  position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 38px;
+  padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: text;
+}
+.people-picker:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.people-picker input { flex: 1 1 90px; min-width: 90px; border: 0 !important; box-shadow: none !important; padding: 4px; background: transparent; outline: none; }
+.people-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 3px; border-radius: 999px;
+  background: var(--primary-soft); font-size: 13px; max-width: 100%;
+}
+.people-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; padding: 0 3px; }
+.people-chip button:hover { color: var(--danger); }
+.people-menu { width: 100%; }
+.inline-tag { margin-left: 6px; font-size: 11px; vertical-align: 1px; }

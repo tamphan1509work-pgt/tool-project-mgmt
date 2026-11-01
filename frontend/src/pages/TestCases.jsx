@@ -1,5 +1,5 @@
 import Comments from '../components/Comments.jsx';
-import { PersonAvatar } from '../components/Avatar.jsx';
+import { PeopleAvatars, PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import { useState } from 'react';
@@ -267,6 +267,8 @@ function TestCaseTable() {
         { name: 'priority', label: 'Ưu tiên', options: options('priority') },
         { name: 'type', label: 'Loại', options: options('testType') },
         { name: 'module', label: 'Module', source: 'modules' },
+        { name: 'assignee', label: 'PIC', source: 'people' },
+        { name: 'supporters', label: 'Hỗ trợ', source: 'people' },
         categoryFilter,
       ]}
       columns={[
@@ -288,6 +290,14 @@ function TestCaseTable() {
           width: 120,
           render: (t) => <Badge kind="testStatus" value={t.status} />,
         },
+        {
+          key: 'assignee',
+          title: 'PIC',
+          sort: 'assignee',
+          width: 110,
+          render: (t) => <PeopleAvatars value={t.assignee} />,
+        },
+        { key: 'supporters', title: 'Hỗ trợ', width: 110, render: (t) => <PeopleAvatars value={t.supporters} /> },
         {
           key: 'last_run_at',
           title: 'Chạy lần cuối',
@@ -534,6 +544,8 @@ export function TestCaseDetail() {
                   items={[
                     ['Danh mục', <CategoryBadge key="c" id={tc.category_id} full />],
                     ['Module', tc.module],
+                    ['PIC', tc.assignee && <PeopleAvatars key="pic" value={tc.assignee} size={24} showName />],
+                    ['Hỗ trợ', tc.supporters && <PeopleAvatars key="sp" value={tc.supporters} size={24} showName />],
                     ['Người tạo', tc.created_by],
                     ['Thời gian tạo', fmtDateTime(tc.created_at)],
                     ['Loại', label('testType', tc.type)],

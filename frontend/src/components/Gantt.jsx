@@ -241,6 +241,7 @@ export default function Gantt({ data, zoom = 'week', showMemberRows = true }) {
                   <div className="g-label g-indent-2">
                     <Link to={`/tasks/${t.id}`} className="g-ellipsis" title={t.title}>
                       <span className="mono muted">{code('tasks', t.id)}</span> {t.title}
+                      {t.involvement === 'support' && <span className="muted small"> (hỗ trợ)</span>}
                     </Link>
                   </div>
                   <div className="g-track" style={{ width }}>
@@ -250,7 +251,9 @@ export default function Gantt({ data, zoom = 'week', showMemberRows = true }) {
                       px={px}
                       to={`/tasks/${t.id}`}
                       className={`g-task g-status-${t.status} ${overdue ? 'g-overdue' : ''}`}
-                      title={`${code('tasks', t.id)} · ${t.title}\nTrạng thái: ${label('taskStatus', t.status)}\n${fmtDate(
+                      title={`${code('tasks', t.id)} · ${t.title}\nTrạng thái: ${label('taskStatus', t.status)}${
+                        t.involvement === 'support' ? '\nVai trò: Hỗ trợ' : ''
+                      }\n${fmtDate(
                         iso(r.span.start),
                       )} → ${t.due_date ? fmtDate(t.due_date) : 'chưa có hạn'}${overdue ? ' (quá hạn)' : ''}`}
                     >

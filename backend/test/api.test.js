@@ -1139,3 +1139,49 @@ describe('phân quyền thành viên & @nhắc tên', () => {
     }
   });
 });
+
+describe('PIC & Hỗ trợ nhiều người', () => {
+  test('lưu danh sách, lọc theo người, đổi tên, Gantt / hồ sơ tính cả người hỗ trợ', async () => {
+    const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
+    let r = await req('POST', '/tasks', {
+      project_id: pay,
+      title: 'Nhiều PIC',
+      assignee: ['Hoàng Gia Huy', ' Vũ Ngọc Lan ', 'hoàng gia huy'],
+      supporters: 'Phạm Thu Dung, Lê Minh Châu',
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.assignee, 'Hoàng Gia Huy, Vũ Ngọc Lan', 'bỏ trùng');
+    assert.equal(r.body.supporters, 'Phạm Thu Dung, Lê Minh Châu');
+    const id = r.body.id;
+    r = await req('GET', `/tasks?project_id=${pay}&assignee=${encodeURIComponent('Vũ Ngọc Lan')}&limit=500`);
+    assert.ok(r.body.items.some((t) => t.id === id));
+    r = await req('GET', `/tasks?project_id=${pay}&supporters=${encodeURIComponent('Lê Minh Châu')}&limit=500`);
+    assert.ok(r.body.items.some((t) => t.id === id) && r.body.items.every((t) => t.supporters.includes('Lê Minh Châu')));
+    assert.equal((await req('PATCH', `/tasks/${id}`, { supporters: [] })).body.supporters, null);
+    await req('PATCH', `/tasks/${id}`, { supporters: ['Lê Minh Châu'] });
+
+    // Test case & bug cũng có PIC / Hỗ trợ
+    const tc = (await req('POST', '/test-cases', { project_id: pay, title: 'TC nhiều người', assignee: ['Phạm Thu Dung'], supporters: ['Hoàng Gia Huy', 'Vũ Ngọc Lan'] })).body;
+    assert.equal(tc.supporters, 'Hoàng Gia Huy, Vũ Ngọc Lan');
+    const bug = (await req('POST', '/bugs', { project_id: pay, title: 'Bug nhiều người', assignee: 'Vũ Ngọc Lan, Hoàng Gia Huy', supporters: ['Phạm Thu Dung'] })).body;
+    r = await req('GET', `/bugs?project_id=${pay}&assignee=${encodeURIComponent('Hoàng Gia Huy')}`);
+    assert.ok(r.body.items.some((b) => b.id === bug.id));
+    assert.equal((await req('POST', '/bugs', { project_id: pay, title: 'x', assignee: ['a'.repeat(101)] })).status, 400);
+
+    // Hồ sơ thành viên: task là PIC hoặc hỗ trợ
+    const chau = (await req('GET', '/members?q=Lê Minh Châu')).body.items[0];
+    const detail = (await req('GET', `/members/${chau.id}`)).body;
+    assert.equal(detail.tasks.find((t) => t.id === id).involvement, 'support');
+    const gantt = (await req('GET', `/gantt?member_id=${chau.id}`)).body;
+    assert.ok(gantt.members[0].projects.some((p) => p.tasks.some((t) => t.id === id)));
+
+    // Đổi tên thành viên -> cập nhật trong danh sách
+    const lan = (await req('GET', '/members?q=Vũ Ngọc Lan')).body.items[0];
+    await req('PATCH', `/members/${lan.id}`, { name: 'Vũ Ngọc Lan Anh' });
+    assert.equal((await req('GET', `/tasks/${id}`)).body.assignee, 'Hoàng Gia Huy, Vũ Ngọc Lan Anh');
+    assert.equal((await req('GET', `/test-cases/${tc.id}`)).body.supporters, 'Hoàng Gia Huy, Vũ Ngọc Lan Anh');
+    await req('PATCH', `/members/${lan.id}`, { name: 'Vũ Ngọc Lan' });
+    assert.ok((await req('GET', `/lookup?project_id=${pay}`)).body.people.includes('Vũ Ngọc Lan'));
+    for (const [res, x] of [['tasks', id], ['test-cases', tc.id], ['bugs', bug.id]]) await req('DELETE', `/${res}/${x}`);
+  });
+});

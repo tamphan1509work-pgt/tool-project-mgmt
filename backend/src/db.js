@@ -325,6 +325,16 @@ function migrate(db) {
   const taskCols3 = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
   if (!taskCols3.includes('requester')) db.exec('ALTER TABLE tasks ADD COLUMN requester TEXT');
 
+  // PIC / Hỗ trợ: nhiều người, lưu dạng "Tên 1, Tên 2" (test case trước đây chưa có PIC)
+  for (const [table, cols] of [
+    ['tasks', ['supporters']],
+    ['bugs', ['supporters']],
+    ['test_cases', ['assignee', 'supporters']],
+  ]) {
+    const have = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    for (const c of cols) if (!have.includes(c)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${c} TEXT`);
+  }
+
   // Ảnh đại diện thành viên (data URL ảnh nhỏ)
   const memberCols3 = db.prepare('PRAGMA table_info(members)').all().map((c) => c.name);
   if (!memberCols3.includes('avatar')) db.exec('ALTER TABLE members ADD COLUMN avatar TEXT');

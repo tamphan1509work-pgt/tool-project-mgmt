@@ -126,3 +126,39 @@ export function AvatarField({ id, value, onChange, name }) {
     </div>
   );
 }
+
+/** "A, B" hoặc ['A', 'B'] -> ['A', 'B'] */
+export const splitPeople = (v) =>
+  (Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []).map((x) => x.trim()).filter(Boolean);
+
+/**
+ * Nhiều người (PIC, Hỗ trợ): avatar xếp chồng, rê chuột từng avatar hiện tên & email.
+ * showName: hiện tên cạnh avatar (dạng danh sách, dùng ở trang chi tiết)
+ */
+export function PeopleAvatars({ value, size = 26, max = 4, showName = false, empty }) {
+  const names = splitPeople(value);
+  if (!names.length) return empty ?? <span className="muted">—</span>;
+  if (showName) {
+    return (
+      <span className="people-list">
+        {names.map((n) => (
+          <PersonAvatar key={n} name={n} size={size} showName />
+        ))}
+      </span>
+    );
+  }
+  const shown = names.length > max ? names.slice(0, max - 1) : names;
+  const rest = names.length - shown.length;
+  return (
+    <span className="people-stack" aria-label={names.join(', ')}>
+      {shown.map((n) => (
+        <PersonAvatar key={n} name={n} size={size} />
+      ))}
+      {rest > 0 && (
+        <span className="people-more" title={names.slice(shown.length).join(', ')} style={{ width: size, height: size }}>
+          +{rest}
+        </span>
+      )}
+    </span>
+  );
+}

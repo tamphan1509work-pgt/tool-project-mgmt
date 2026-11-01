@@ -657,6 +657,15 @@ export function seed(db, { reset = false } = {}) {
     db.prepare('UPDATE bugs SET created_by = reporter').run();
     db.prepare('UPDATE documents SET created_by = author').run();
     db.prepare('UPDATE meetings SET created_by = facilitator').run();
+
+    // ---------- PIC / Hỗ trợ (nhiều người) ----------
+    db.prepare("UPDATE tasks SET supporters = 'Lê Minh Châu, Phạm Thu Dung' WHERE id = ?").run(t2);
+    db.prepare("UPDATE tasks SET assignee = 'Vũ Ngọc Lan, Đỗ Quang Minh', supporters = 'Hoàng Gia Huy' WHERE id = ?").run(t3);
+    db.prepare("UPDATE test_cases SET assignee = 'Phạm Thu Dung' WHERE project_id = ?").run(pay);
+    db.prepare("UPDATE test_cases SET supporters = 'Hoàng Gia Huy' WHERE project_id = ? AND task_id = ?").run(pay, t2);
+    db.prepare("UPDATE test_cases SET assignee = 'Phạm Thu Dung' WHERE project_id = ?").run(crm);
+    db.prepare("UPDATE bugs SET supporters = 'Phạm Thu Dung' WHERE project_id = ? AND assignee IS NOT NULL").run(pay);
+    db.prepare("UPDATE bugs SET assignee = 'Vũ Ngọc Lan, Hoàng Gia Huy' WHERE id = 1").run();
   });
 
   console.log('Đã tạo dữ liệu mẫu.');

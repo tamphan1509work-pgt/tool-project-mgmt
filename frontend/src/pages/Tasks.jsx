@@ -1,5 +1,5 @@
 import Comments from '../components/Comments.jsx';
-import { PersonAvatar } from '../components/Avatar.jsx';
+import { PeopleAvatars, PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import { useState } from 'react';
@@ -18,6 +18,7 @@ import { taskFields } from '../forms.js';
 const FILTERS = [
   { name: 'priority', label: 'Ưu tiên', options: options('priority') },
   { name: 'assignee', label: 'PIC', source: 'people' },
+  { name: 'supporters', label: 'Hỗ trợ', source: 'people' },
   categoryFilter,
   {
     name: 'milestone_id',
@@ -138,11 +139,11 @@ function Board({ switcher }) {
                     <Badge kind="priority" value={t.priority} />
                   </div>
                   <div className="board-card-meta">
-                    {t.assignee ? (
-                      <PersonAvatar name={t.assignee} size={22} showName />
-                    ) : (
-                      <span className="muted">Chưa giao</span>
-                    )}
+                    <PeopleAvatars
+                      value={t.assignee}
+                      size={22}
+                      empty={<span className="muted">Chưa giao</span>}
+                    />
                     <Due task={t} />
                   </div>
                   <select
@@ -212,8 +213,14 @@ export function TaskList() {
           key: 'assignee',
           title: 'PIC',
           sort: 'assignee',
-          width: 60,
-          render: (t) => <PersonAvatar name={t.assignee} />,
+          width: 110,
+          render: (t) => <PeopleAvatars value={t.assignee} />,
+        },
+        {
+          key: 'supporters',
+          title: 'Hỗ trợ',
+          width: 110,
+          render: (t) => <PeopleAvatars value={t.supporters} />,
         },
         { key: 'requester', title: 'Người yêu cầu', sort: 'requester', width: 140, className: 'nowrap' },
         { key: 'due_date', title: 'Hạn', sort: 'due_date', width: 100, render: (t) => <Due task={t} /> },
@@ -357,7 +364,8 @@ export function TaskDetail() {
                       </Link>
                     ),
                   ],
-                  ['PIC', t.assignee],
+                  ['PIC', t.assignee && <PeopleAvatars key="pic" value={t.assignee} size={24} showName />],
+                  ['Hỗ trợ', t.supporters && <PeopleAvatars key="sp" value={t.supporters} size={24} showName />],
                   ['Người yêu cầu', t.requester],
                   ['Người tạo', t.created_by],
                   ['Thời gian tạo', fmtDateTime(t.created_at)],

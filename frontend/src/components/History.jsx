@@ -38,6 +38,8 @@ const SETTING_LABELS = {
   email_to_assignee: 'Gửi cho người thực hiện',
   email_to_pm: 'Gửi cho PM dự án',
   extra_emails: 'Email nhận thêm',
+  mention_web: 'Thông báo web khi được @nhắc tên',
+  mention_email: 'Email khi được @nhắc tên',
 };
 
 export const ENTITY_LABELS = {

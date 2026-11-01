@@ -1,3 +1,5 @@
+import Comments from '../components/Comments.jsx';
+import { PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import { useState } from 'react';
@@ -136,7 +138,11 @@ function Board({ switcher }) {
                     <Badge kind="priority" value={t.priority} />
                   </div>
                   <div className="board-card-meta">
-                    <span>{t.assignee || <span className="muted">Chưa giao</span>}</span>
+                    {t.assignee ? (
+                      <PersonAvatar name={t.assignee} size={22} showName />
+                    ) : (
+                      <span className="muted">Chưa giao</span>
+                    )}
                     <Due task={t} />
                   </div>
                   <select
@@ -180,6 +186,7 @@ export function TaskList() {
           key: 'title',
           title: 'Tên task',
           sort: 'title',
+          minWidth: 240,
           render: (t) => (
             <div className="person-cell">
               <strong>{t.title}</strong>
@@ -201,11 +208,23 @@ export function TaskList() {
           width: 120,
           render: (t) => <Badge kind="priority" value={t.priority} />,
         },
-        { key: 'assignee', title: 'PIC', sort: 'assignee', width: 140, className: 'nowrap' },
+        {
+          key: 'assignee',
+          title: 'PIC',
+          sort: 'assignee',
+          width: 60,
+          render: (t) => <PersonAvatar name={t.assignee} />,
+        },
         { key: 'requester', title: 'Người yêu cầu', sort: 'requester', width: 140, className: 'nowrap' },
         { key: 'due_date', title: 'Hạn', sort: 'due_date', width: 100, render: (t) => <Due task={t} /> },
         { key: 'category_id', title: 'Danh mục', width: 140, render: (r) => <CategoryBadge id={r.category_id} /> },
-        { key: 'created_by', title: 'Người tạo', sort: 'created_by', width: 140, className: 'nowrap' },
+        {
+          key: 'created_by',
+          title: 'Người tạo',
+          sort: 'created_by',
+          width: 80,
+          render: (t) => <PersonAvatar name={t.created_by} />,
+        },
         {
           key: 'created_at',
           title: 'Thời gian tạo',
@@ -226,7 +245,7 @@ export function TaskDetail() {
       backLabel="Danh sách task"
       formFields={taskFields}
       historyTab
-      tabs={(t) => [
+      tabs={(t, { reload }) => [
         {
           key: 'test-cases',
           label: 'Test case',
@@ -267,6 +286,12 @@ export function TaskDetail() {
               />
             </Section>
           ),
+        },
+        {
+          key: 'comments',
+          label: 'Bình luận',
+          count: t.comment_count,
+          render: () => <Comments entity="tasks" id={t.id} onChanged={reload} />,
         },
       ]}
       badges={(t) => (

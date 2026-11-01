@@ -1,3 +1,5 @@
+import Comments from '../components/Comments.jsx';
+import { PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import { Link } from 'react-router-dom';
@@ -29,9 +31,9 @@ export function BugList() {
       resource="bugs"
       noun="bug"
       formFields={bugFields}
+      statusChips={{ field: 'status', kind: 'bugStatus' }}
       searchPlaceholder="Tìm theo tiêu đề, mô tả, môi trường, người…"
       filters={[
-        { name: 'status', label: 'Trạng thái', options: options('bugStatus') },
         { name: 'severity', label: 'Mức độ', options: options('bugSeverity') },
         { name: 'priority', label: 'Ưu tiên', options: options('priority') },
         { name: 'assignee', label: 'Người xử lý', source: 'people' },
@@ -39,7 +41,7 @@ export function BugList() {
         { name: 'open', label: 'Chỉ bug đang mở', type: 'toggle' },
       ]}
       columns={[
-        { key: 'title', title: 'Tiêu đề', sort: 'title', render: (b) => <strong>{b.title}</strong> },
+        { key: 'title', title: 'Tiêu đề', sort: 'title', minWidth: 240, render: (b) => <strong>{b.title}</strong> },
         {
           key: 'severity',
           title: 'Mức độ',
@@ -69,7 +71,13 @@ export function BugList() {
           render: (b) => b.assignee || <span className="muted">Chưa giao</span>,
         },
         { key: 'reporter', title: 'Người báo bug', sort: 'reporter', width: 140, className: 'nowrap' },
-        { key: 'created_by', title: 'Người tạo', sort: 'created_by', width: 140, className: 'nowrap' },
+        {
+          key: 'created_by',
+          title: 'Người tạo',
+          sort: 'created_by',
+          width: 80,
+          render: (b) => <PersonAvatar name={b.created_by} />,
+        },
         {
           key: 'created_at',
           title: 'Thời gian tạo',
@@ -89,6 +97,14 @@ export function BugDetail() {
       resource="bugs"
       backLabel="Danh sách bug"
       historyTab
+      tabs={(b, { reload }) => [
+        {
+          key: 'comments',
+          label: 'Bình luận',
+          count: b.comment_count,
+          render: () => <Comments entity="bugs" id={b.id} onChanged={reload} />,
+        },
+      ]}
       formFields={bugFields}
       badges={(b) => (
         <>

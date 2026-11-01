@@ -227,6 +227,20 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_member ON sessions(member_id);
 
+-- Bình luận trên task / test case / bug (giữa các thành viên dự án)
+CREATE TABLE IF NOT EXISTS comments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  entity       TEXT NOT NULL,
+  entity_id    INTEGER NOT NULL,
+  member_id    INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  author_name  TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity, entity_id, id);
+
 -- Cài đặt hệ thống (key -> JSON)
 CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
@@ -292,6 +306,10 @@ function migrate(db) {
   }
   const taskCols3 = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
   if (!taskCols3.includes('requester')) db.exec('ALTER TABLE tasks ADD COLUMN requester TEXT');
+
+  // Ảnh đại diện thành viên (data URL ảnh nhỏ)
+  const memberCols3 = db.prepare('PRAGMA table_info(members)').all().map((c) => c.name);
+  if (!memberCols3.includes('avatar')) db.exec('ALTER TABLE members ADD COLUMN avatar TEXT');
 
   // Danh mục cho task, test case, bug, tài liệu
   for (const table of ['tasks', 'test_cases', 'bugs', 'documents']) {

@@ -1,3 +1,5 @@
+import Comments from '../components/Comments.jsx';
+import { PersonAvatar } from '../components/Avatar.jsx';
 import CategoryBadge from '../components/CategoryBadge.jsx';
 import { categoryFilter } from '../categories.js';
 import { useState } from 'react';
@@ -256,19 +258,19 @@ function TestCaseTable() {
   return (
     <ResourceList
       persistentParams={['tab']}
+      statusChips={{ field: 'status', kind: 'testStatus' }}
       resource="test-cases"
       noun="test case"
       formFields={testCaseFields}
       searchPlaceholder="Tìm theo tên, module, các bước, mã…"
       filters={[
-        { name: 'status', label: 'Kết quả', options: options('testStatus') },
         { name: 'priority', label: 'Ưu tiên', options: options('priority') },
         { name: 'type', label: 'Loại', options: options('testType') },
         { name: 'module', label: 'Module', source: 'modules' },
         categoryFilter,
       ]}
       columns={[
-        { key: 'title', title: 'Tên test case', sort: 'title', render: (t) => <strong>{t.title}</strong> },
+        { key: 'title', title: 'Tên test case', sort: 'title', minWidth: 240, render: (t) => <strong>{t.title}</strong> },
         { key: 'module', title: 'Module', sort: 'module', width: 140 },
         { key: 'category_id', title: 'Danh mục', width: 150, render: (r) => <CategoryBadge id={r.category_id} /> },
         { key: 'type', title: 'Loại', width: 110, render: (t) => label('testType', t.type) },
@@ -294,7 +296,13 @@ function TestCaseTable() {
           className: 'muted small',
           render: (t) => fmtDateTime(t.last_run_at),
         },
-        { key: 'created_by', title: 'Người tạo', sort: 'created_by', width: 140, className: 'nowrap' },
+        {
+          key: 'created_by',
+          title: 'Người tạo',
+          sort: 'created_by',
+          width: 80,
+          render: (t) => <PersonAvatar name={t.created_by} />,
+        },
         {
           key: 'created_at',
           title: 'Thời gian tạo',
@@ -483,6 +491,14 @@ export function TestCaseDetail() {
       resource="test-cases"
       backLabel="Test report"
       historyTab
+      tabs={(tc, { reload }) => [
+        {
+          key: 'comments',
+          label: 'Bình luận',
+          count: tc.comment_count,
+          render: () => <Comments entity="test-cases" id={tc.id} onChanged={reload} />,
+        },
+      ]}
       formFields={testCaseFields}
       badges={(tc) => (
         <>

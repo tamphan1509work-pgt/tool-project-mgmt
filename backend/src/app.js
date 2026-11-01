@@ -677,6 +677,71 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   api.use('/categories', createResource(db, categories));
   api.use('/milestones', createResource(db, milestones));
 
+  // ---- Bình luận trên task / test case / bug ----
+  const COMMENT_TABLES = { tasks: 'tasks', 'test-cases': 'test_cases', bugs: 'bugs' };
+  const commentTarget = (entity, rawId) => {
+    const table = COMMENT_TABLES[entity];
+    if (!table) throw new HttpError(400, 'Chỉ bình luận được trên task, test case và bug');
+    const id = parseId(rawId);
+    const row = db.prepare(`SELECT id, project_id FROM ${table} WHERE id = ?`).get(id);
+    if (!row) throw new HttpError(404, 'Không tìm thấy mục cần bình luận');
+    return row;
+  };
+  const commentBody = (raw) => {
+    const body = typeof raw === 'string' ? raw.trim() : '';
+    if (!body) throw new HttpError(400, 'Dữ liệu không hợp lệ', { body: 'Nội dung bình luận không được để trống' });
+    if (body.length > 5000) throw new HttpError(400, 'Dữ liệu không hợp lệ', { body: 'Tối đa 5000 ký tự' });
+    return body;
+  };
+  const COMMENT_SELECT = `SELECT c.id, c.entity, c.entity_id, c.member_id, c.author_name, c.body, c.created_at, c.updated_at,
+      m.email AS author_email, m.avatar AS author_avatar
+    FROM comments c LEFT JOIN members m ON m.id = c.member_id`;
+  const getComment = (id) => db.prepare(`${COMMENT_SELECT} WHERE c.id = ?`).get(id);
+
+  api.get('/comments', (req, res) => {
+    const target = commentTarget(req.query.entity, req.query.entity_id);
+    res.json(
+      db
+        .prepare(`${COMMENT_SELECT} WHERE c.entity = ? AND c.entity_id = ? ORDER BY c.id`)
+        .all(req.query.entity, target.id),
+    );
+  });
+
+  // Chỉ thành viên của dự án (hoặc quản trị viên) mới bình luận được
+  api.post('/comments', (req, res) => {
+    const { entity, entity_id: entityId } = req.body ?? {};
+    const target = commentTarget(entity, entityId);
+    const isMember = db
+      .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND member_id = ?')
+      .get(target.project_id, req.user.id);
+    if (!isMember && !req.user.is_admin) {
+      throw new HttpError(403, 'Chỉ thành viên của dự án mới bình luận được');
+    }
+    const info = db
+      .prepare('INSERT INTO comments (project_id, entity, entity_id, member_id, author_name, body) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(target.project_id, entity, target.id, req.user.id, req.user.name, commentBody(req.body.body));
+    res.status(201).json(getComment(Number(info.lastInsertRowid)));
+  });
+
+  // Sửa: chỉ người viết. Xoá: người viết hoặc quản trị viên
+  api.patch('/comments/:id', (req, res) => {
+    const c = getComment(parseId(req.params.id));
+    if (!c) throw new HttpError(404, 'Không tìm thấy bình luận');
+    if (c.member_id !== req.user.id) throw new HttpError(403, 'Chỉ người viết mới sửa được bình luận');
+    db.prepare("UPDATE comments SET body = ?, updated_at = datetime('now') WHERE id = ?").run(commentBody(req.body?.body), c.id);
+    res.json(getComment(c.id));
+  });
+
+  api.delete('/comments/:id', (req, res) => {
+    const c = getComment(parseId(req.params.id));
+    if (!c) throw new HttpError(404, 'Không tìm thấy bình luận');
+    if (c.member_id !== req.user.id && !req.user.is_admin) {
+      throw new HttpError(403, 'Chỉ người viết hoặc quản trị viên mới xoá được bình luận');
+    }
+    db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
+    res.status(204).end();
+  });
+
   // ---- Lịch sử thay đổi ----
   api.get('/history', (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
@@ -739,7 +804,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   // ---- Dữ liệu cho dropdown liên kết (theo dự án) ----
   api.get('/lookup', (req, res) => {
     const allProjects = db.prepare('SELECT id, code, name, status FROM projects ORDER BY name').all();
-    const allMembers = db.prepare('SELECT id, name, email FROM members ORDER BY name').all();
+    const allMembers = db.prepare('SELECT id, name, email, avatar FROM members ORDER BY name').all();
     if (!req.query.project_id) {
       return res.json({
         projects: allProjects,

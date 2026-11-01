@@ -27,6 +27,7 @@ const TABLES = [
   'tasks',
   'meetings',
   'documents',
+  'comments',
   'sessions',
   'accounts',
   'history',
@@ -600,6 +601,24 @@ export function seed(db, { reset = false } = {}) {
     hist('tasks', t2, 'update', null, [{ field: 'status', from: 'todo', to: 'in_progress' }], 'Hoàng Gia Huy', -9, '02:30:00');
     hist('tasks', t2, 'update', null, [{ field: 'status', from: 'in_progress', to: 'testing' }, { field: 'due_date', from: day(-1), to: day(1) }], 'Hoàng Gia Huy', -1, '09:15:00');
     hist('projects', pay, 'member', 'Thêm thành viên "Đỗ Quang Minh" (Designer)', null, 'Nguyễn Văn An', -20, '03:00:00');
+
+    // ---------- Bình luận ----------
+    const comment = (entity, entityId, name, body, offset, time) =>
+      insert('comments', {
+        project_id: pay,
+        entity,
+        entity_id: entityId,
+        member_id: people[name],
+        author_name: name,
+        body,
+        created_at: `${day(offset)} ${time}`,
+      });
+    comment('tasks', t2, 'Nguyễn Văn An', 'Huy ước lượng giúp anh phần callback cần thêm bao lâu nhé?', -3, '02:10:00');
+    comment('tasks', t2, 'Hoàng Gia Huy', 'Khoảng 1 ngày nữa ạ, em đang chờ NAPAS cấp môi trường sandbox.', -3, '02:45:00');
+    comment('tasks', t2, 'Phạm Thu Dung', 'Bên QA đã sẵn test case TC-001, khi nào lên staging em test ngay.', -1, '08:30:00');
+    comment('tasks', t3, 'Vũ Ngọc Lan', 'Màn hình OTP đang chờ API của Huy merge xong.', -1, '03:00:00');
+    comment('bugs', 1, 'Phạm Thu Dung', 'Đã tái hiện được trên Chrome và Safari, đính kèm video ở lần chạy test.', -2, '04:00:00');
+    comment('bugs', 1, 'Vũ Ngọc Lan', 'Em đã tìm ra nguyên nhân: bộ đếm sai bị reset khi gửi lại OTP. Đang sửa.', -1, '07:20:00');
 
     // ---------- Người tạo & người yêu cầu ----------
     db.prepare("UPDATE tasks SET created_by = 'Nguyễn Văn An', requester = 'Trần Thị Bình' WHERE project_id = ?").run(pay);

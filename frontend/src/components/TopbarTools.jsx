@@ -5,6 +5,7 @@ import { useAuth } from '../auth.jsx';
 import { code, fmtDate } from '../constants.js';
 import { useConfirm, useProject, useToast } from '../context.jsx';
 import PasswordInput from './PasswordInput.jsx';
+import { Avatar } from './Avatar.jsx';
 import { Icon, Modal } from './ui.jsx';
 
 function ChangePasswordModal({ onClose }) {
@@ -100,7 +101,7 @@ export function UserMenu() {
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Tài khoản">
-        <span className="avatar">{initialsOf(user.name)}</span>
+        <Avatar name={user.name} src={user.avatar} size={28} />
         <span className="user-name">{user.name}</span>
       </button>
       {open && (

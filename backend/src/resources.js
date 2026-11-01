@@ -30,6 +30,9 @@ const timestamps = { created_at: 'created_at', updated_at: 'updated_at' };
 /** Task được giao cho một người: so khớp theo tên (bỏ khoảng trắng thừa, không phân biệt hoa thường) */
 export const ASSIGNED = (col, nameExpr) => `lower(trim(${col})) = lower(trim(${nameExpr}))`;
 
+const commentCount = (db, entity, id) =>
+  db.prepare('SELECT COUNT(*) AS n FROM comments WHERE entity = ? AND entity_id = ?').get(entity, id).n;
+
 const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 
 export const meetings = {
@@ -115,6 +118,7 @@ export const tasks = {
        WHERE l.task_id = tasks.id AND l.type = 'depends_on' AND o.status NOT IN ('released', 'canceled')) AS blocked_by_count`,
   trackCreator: true,
   countBy: 'status',
+  commentable: true,
   searchable: ['title', 'description', 'assignee', 'requester', 'created_by'],
   filterable: ['project_id', 'status', 'priority', 'assignee', 'requester', 'meeting_id', 'parent_id', 'milestone_id'],
   sortable: {
@@ -160,6 +164,7 @@ export const tasks = {
   },
   expand(db, row) {
     return {
+      comment_count: commentCount(db, this.resource, row.id),
       meeting: row.meeting_id
         ? db.prepare('SELECT id, title, meeting_date FROM meetings WHERE id = ?').get(row.meeting_id) ?? null
         : null,
@@ -230,6 +235,8 @@ export const testCases = {
     task_id: { type: 'ref', table: 'tasks', sameProject: true },
   },
   trackCreator: true,
+  commentable: true,
+  countBy: 'status',
   searchable: ['title', 'module', 'steps', 'expected_result'],
   filterable: ['project_id', 'status', 'priority', 'type', 'module', 'task_id'],
   sortable: {
@@ -246,6 +253,7 @@ export const testCases = {
   defaultOrder: 'ASC',
   expand(db, row) {
     return {
+      comment_count: commentCount(db, this.resource, row.id),
       task: row.task_id ? db.prepare('SELECT id, title, status FROM tasks WHERE id = ?').get(row.task_id) ?? null : null,
       runs: runsWithAttachments(db, row.id),
       bugs: db
@@ -297,6 +305,8 @@ export const bugs = {
     task_id: { type: 'ref', table: 'tasks', sameProject: true },
   },
   trackCreator: true,
+  commentable: true,
+  countBy: 'status',
   searchable: ['title', 'description', 'steps_to_reproduce', 'actual_result', 'environment', 'assignee', 'reporter'],
   filterable: ['project_id', 'status', 'severity', 'priority', 'assignee', 'test_case_id', 'task_id'],
   sortable: {
@@ -320,6 +330,7 @@ export const bugs = {
   },
   expand(db, row) {
     return {
+      comment_count: commentCount(db, this.resource, row.id),
       test_case: row.test_case_id
         ? db.prepare('SELECT id, title, status FROM test_cases WHERE id = ?').get(row.test_case_id) ?? null
         : null,
@@ -521,6 +532,7 @@ export const members = {
     phone: { type: 'string', max: 30 },
     position: { type: 'string', max: 100 },
     email_notifications: { type: 'boolean', default: 1 },
+    avatar: { type: 'avatar' },
   },
   selectExtra: `
     (SELECT COUNT(*) FROM accounts a WHERE a.member_id = members.id) AS has_account,

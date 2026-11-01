@@ -71,13 +71,21 @@ export async function userFromToken(db, token) {
   const tokenHash = await sha256Hex(token);
   const row = db
     .prepare(
-      `SELECT m.id, m.name, m.email, m.position, a.is_admin, s.expires_at FROM sessions s
+      `SELECT m.id, m.name, m.email, m.position, m.avatar, a.is_admin, s.expires_at FROM sessions s
        JOIN accounts a ON a.member_id = s.member_id JOIN members m ON m.id = s.member_id
        WHERE s.token_hash = ? AND s.expires_at > datetime('now') AND a.disabled = 0`,
     )
     .get(tokenHash);
   if (!row) return null;
-  return { id: row.id, name: row.name, email: row.email, position: row.position, is_admin: Boolean(row.is_admin), tokenHash };
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    position: row.position,
+    avatar: row.avatar,
+    is_admin: Boolean(row.is_admin),
+    tokenHash,
+  };
 }
 
 export const bearer = (req) => {

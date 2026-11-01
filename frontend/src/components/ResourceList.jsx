@@ -220,14 +220,6 @@ export default function ResourceList({
 
   return (
     <>
-      {statusChips && (
-        <StatusChips
-          kind={statusChips.kind}
-          counts={data?.counts}
-          value={params.get(statusChips.field) ?? ''}
-          onChange={(v) => setParam(statusChips.field, v)}
-        />
-      )}
       <div className="toolbar">
         <SearchBox value={params.get('q') ?? ''} onChange={(v) => setParam('q', v)} placeholder={searchPlaceholder} />
         <Filters filters={filters} params={params} setParam={setParam} />
@@ -252,6 +244,14 @@ export default function ResourceList({
           <Icon name="plus" /> Thêm {noun}
         </button>
       </div>
+      {statusChips && (
+        <StatusChips
+          kind={statusChips.kind}
+          counts={data?.counts}
+          value={params.get(statusChips.field) ?? ''}
+          onChange={(v) => setParam(statusChips.field, v)}
+        />
+      )}
 
       <ErrorBox error={error} onRetry={reload} />
       {loading && !data ? (
@@ -269,7 +269,7 @@ export default function ResourceList({
                   {columns.map((c) => (
                     <th
                       key={c.key}
-                      style={{ width: c.width }}
+                      style={{ width: c.width, minWidth: c.minWidth }}
                       className={c.sort ? 'sortable' : ''}
                       onClick={c.sort ? () => toggleSort(c.sort) : undefined}
                       aria-sort={sort === c.sort ? (order === 'asc' ? 'ascending' : 'descending') : undefined}

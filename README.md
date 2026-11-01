@@ -9,16 +9,18 @@
 | **Đăng nhập / đăng xuất** | Đăng nhập bằng email của thành viên + mật khẩu (ghi nhớ 30 ngày hoặc 1 ngày). Lần chạy đầu tiên (chưa có tài khoản) hiện màn hình **tạo tài khoản quản trị**. Menu tài khoản: hồ sơ, **đổi mật khẩu**, **đăng xuất**. Danh sách Thành viên có cột **Chức danh**, **Tài khoản** (Thành viên / Quản trị viên) và **Trạng thái** (Active / Inactive, lọc được). Quản trị viên **bật / tắt** tài khoản ngay trên bảng (bật thành viên chưa có tài khoản = tạo tài khoản), **đổi mật khẩu** của thành viên (icon chìa khoá), cấp / gỡ quyền quản trị ở trang chi tiết; ô mật khẩu có icon con mắt để ẩn / hiện; chỉ quản trị viên được đổi Cài đặt. Đăng nhập sai 5 lần liên tiếp bị khoá 5 phút |
 | **Lịch sử thay đổi** | Mọi trang chi tiết có mục *Lịch sử thay đổi*: ai, lúc nào, tạo / sửa / xoá, đính kèm file, chạy test, liên kết task, thêm thành viên… Khi sửa, ghi rõ từng trường *giá trị cũ → giá trị mới*. Người thao tác là người đang đăng nhập |
 | **Thông báo deadline** | **Cài đặt** bật / tắt: chuông thông báo trên web (task / milestone trễ hoặc sắp đến hạn, xem theo dự án hoặc tất cả) và **email tổng hợp hằng ngày** (giờ gửi, nhắc trước N ngày, người nhận: người thực hiện / PM / email thêm; mỗi mục chỉ nhắc một lần mỗi ngày; xem trước & gửi ngay). Từng thành viên có thể tắt email của mình |
-| **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
+| **Thành viên** | Danh bạ thành viên dùng chung (**ảnh đại diện** — tải ảnh lên, tự thu nhỏ 128×128; chưa có ảnh thì hiện chữ viết tắt, họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
 | **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** ngay khi tạo / sửa biên bản hoặc tại trang chi tiết (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
-| **Task** | Trạng thái: **To Do → In Progress → Done Dev → Testing → Ready Release → Released**, hoặc **Canceled** (Released / Canceled = đã đóng). Danh sách có **nhãn lọc trạng thái kèm số lượng**, cột PIC, Người yêu cầu, Người tạo, Thời gian tạo; dạng bảng hoặc Kanban kéo-thả. **Mô tả dùng trình soạn thảo**: định dạng chữ, tiêu đề, danh sách đánh số / gạch đầu dòng, bảng, ảnh (chọn, dán hoặc kéo thả), liên kết, trích dẫn, khối mã — nội dung được lọc mã độc (DOMPurify) khi hiển thị. Trang chi tiết có các tab **Chi tiết** (mô tả, subtask, tài liệu liên quan, task liên quan / phụ thuộc), **Test case**, **Bug**, **Lịch sử thay đổi** |
-| **Test report** | Danh sách có cột Người tạo, Thời gian tạo; chi tiết có tab Lịch sử thay đổi. Hai tab: **Danh sách test case** và **Thống kê** (tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module / độ ưu tiên / loại test / người thực hiện, các lần chạy gần đây); danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
-| **Bug** | Cột Người báo bug, Người tạo, Thời gian tạo; chi tiết có tab Lịch sử thay đổi. Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
+| **Task** | Trạng thái: **To Do → In Progress → Done Dev → Testing → Ready Release → Released**, hoặc **Canceled** (Released / Canceled = đã đóng). Danh sách có **nhãn lọc trạng thái kèm số lượng** (nằm dưới các bộ lọc khác), cột PIC, Người yêu cầu, Người tạo, Thời gian tạo; dạng bảng hoặc Kanban kéo-thả. **Mô tả dùng trình soạn thảo**: định dạng chữ, tiêu đề, danh sách đánh số / gạch đầu dòng, bảng, ảnh (chọn, dán hoặc kéo thả), liên kết, trích dẫn, khối mã — nội dung được lọc mã độc (DOMPurify) khi hiển thị. Trang chi tiết có các tab **Chi tiết** (mô tả, subtask, tài liệu liên quan, task liên quan / phụ thuộc), **Test case**, **Bug**, **Bình luận**, **Lịch sử thay đổi** |
+| **Test report** | Danh sách có **nhãn lọc kết quả kèm số lượng** (Chưa chạy / Đạt / Không đạt / Bị chặn), cột Người tạo, Thời gian tạo; chi tiết có tab **Bình luận** và Lịch sử thay đổi. Hai tab: **Danh sách test case** và **Thống kê** (tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module / độ ưu tiên / loại test / người thực hiện, các lần chạy gần đây); danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) kèm **file bằng chứng** (ảnh chụp màn hình, log…), lịch sử chạy hiển thị file của từng lần chạy và cho thêm file sau |
+| **Bug** | **Nhãn lọc trạng thái kèm số lượng**, cột Người báo bug, Người tạo, Thời gian tạo; chi tiết có tab **Bình luận** và Lịch sử thay đổi. Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
 | **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
 
 Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Menu trái **thu gọn / mở rộng** được (nút ☰ hoặc "Thu gọn menu"; chỉ còn icon, có chú thích khi rê chuột) và được ghi nhớ. Dự án đang làm việc được chọn ở thanh bên trái.
 
 Mọi mục (biên bản, task, test case, bug, tài liệu, dự án, thành viên) có nút **Copy link** ở trang chi tiết và trên từng dòng danh sách: người nhận mở link là vào thẳng mục đó (tự chuyển sang đúng dự án). Bản demo dùng link artifact kèm `#tasks-12` (đặt link gốc qua biến `VITE_SHARE_URL` khi build demo).
+
+Cột **Người tạo** và **PIC** hiển thị avatar, rê chuột vào hiện họ tên và email. **Bình luận** (Task, Test report, Bug): thành viên của dự án trao đổi trong tab Bình luận (Ctrl + Enter để gửi), sửa bình luận của mình, xoá bình luận của mình (quản trị viên xoá được mọi bình luận).
 
 Thời gian hiển thị theo định dạng `dd/mm/yyyy hh:mm:ss`. Người tạo được ghi tự động theo tài khoản đăng nhập. Mọi bảng có cột **STT**; danh sách hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL.
 
@@ -131,6 +133,8 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | GET | `/tasks?counts=status` | Kèm `counts`: số task theo trạng thái (theo các bộ lọc khác, bỏ qua bộ lọc trạng thái) |
 | GET | `/{resource}?category_id=` | Lọc task / test case / bug / tài liệu theo danh mục (gồm danh mục con; `none` = chưa phân loại) |
 | GET | `/history?entity=tasks&entity_id=12` hoặc `?project_id=` | Lịch sử thay đổi của một mục / cả dự án. Người thao tác lấy theo tài khoản đăng nhập |
+| GET / POST | `/comments?entity=tasks&entity_id=12` | Bình luận của task / test case (`test-cases`) / bug; gửi: `{ entity, entity_id, body }` (thành viên dự án hoặc quản trị viên) |
+| PATCH / DELETE | `/comments/:id` | Sửa (tác giả) / xoá (tác giả hoặc quản trị viên) bình luận |
 | GET / PUT | `/settings` | Cài đặt thông báo |
 | GET | `/notifications?project_id=` | Task / milestone trễ hoặc sắp đến hạn (thông báo web) |
 | POST | `/notifications/email/preview` · `/notifications/email/run` | Xem trước / gửi ngay email nhắc deadline |
@@ -168,6 +172,6 @@ Database từ phiên bản cũ (chưa có dự án) được tự động nâng 
 
 ## Hướng phát triển tiếp
 
-- Đăng nhập / phân quyền người dùng, quản lý thành viên
-- Bình luận, đính kèm file, lịch sử thay đổi
+- Phân quyền chi tiết theo vai trò trong dự án
+- @nhắc tên trong bình luận kèm thông báo
 - Test suite / test plan theo sprint, sprint & milestone

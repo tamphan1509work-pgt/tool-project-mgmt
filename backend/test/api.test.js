@@ -922,3 +922,56 @@ describe('task workflow, creator, requester, status counts', () => {
     }
   });
 });
+
+describe('comments, avatar, status chips', () => {
+  test('bình luận: chỉ thành viên dự án, sửa của mình, xoá của mình hoặc quản trị viên', async () => {
+    const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
+    const t = (await req('POST', '/tasks', { project_id: pay, title: 'Có bình luận' })).body;
+    const login = async (email, pw = '123456') => (await req('POST', '/auth/login', { email, password: pw }, null)).body.token;
+    const binh = await login('binh.tran@example.com'); // thành viên dự án PAY (BA)
+    const tam = await login('tam.bui@example.com'); // không thuộc dự án PAY
+
+    let r = await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: '  Xin chào team  ' }, binh);
+    assert.equal(r.status, 201);
+    assert.equal(r.body.body, 'Xin chào team');
+    assert.equal(r.body.author_name, 'Trần Thị Bình');
+    assert.equal(r.body.author_email, 'binh.tran@example.com');
+    const cid = r.body.id;
+    assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'x' }, tam)).status, 403);
+    assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: '   ' }, binh)).status, 400);
+    assert.equal((await req('POST', '/comments', { entity: 'meetings', entity_id: 1, body: 'x' }, binh)).status, 400);
+    assert.equal((await req('POST', '/comments', { entity: 'tasks', entity_id: t.id, body: 'Admin góp ý' })).status, 201, 'quản trị viên');
+
+    r = await req('GET', `/comments?entity=tasks&entity_id=${t.id}`, undefined, tam);
+    assert.equal(r.body.length, 2);
+    assert.equal((await req('GET', `/tasks/${t.id}`)).body.comment_count, 2);
+
+    assert.equal((await req('PATCH', `/comments/${cid}`, { body: 'sửa bậy' })).status, 403, 'admin không sửa được của người khác');
+    r = await req('PATCH', `/comments/${cid}`, { body: 'Đã sửa' }, binh);
+    assert.equal(r.body.body, 'Đã sửa');
+    assert.ok(r.body.updated_at);
+    assert.equal((await req('DELETE', `/comments/${cid}`, undefined, tam)).status, 403);
+    assert.equal((await req('DELETE', `/comments/${cid}`)).status, 204, 'quản trị viên xoá được');
+
+    await req('DELETE', `/tasks/${t.id}`);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comments WHERE entity = 'tasks' AND entity_id = ?").get(t.id).n, 0);
+  });
+
+  test('avatar thành viên & đếm theo trạng thái cho test case / bug', async () => {
+    const m = (await req('POST', '/members', { name: 'Có avatar' })).body;
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    assert.equal((await req('PATCH', `/members/${m.id}`, { avatar: png })).body.avatar, png);
+    assert.equal((await req('PATCH', `/members/${m.id}`, { avatar: 'data:image/svg+xml;base64,PHN2Zz4=' })).status, 400, 'không nhận SVG');
+    assert.equal((await req('PATCH', `/members/${m.id}`, { avatar: 'javascript:alert(1)' })).status, 400);
+    assert.equal((await req('PATCH', `/members/${m.id}`, { avatar: null })).body.avatar, null);
+    const lookup = (await req('GET', '/lookup')).body.allMembers;
+    assert.ok('avatar' in lookup[0] && 'email' in lookup[0]);
+
+    const pay = (await req('GET', '/projects?q=PAY')).body.items.find((p) => p.code === 'PAY').id;
+    let r = await req('GET', `/test-cases?project_id=${pay}&counts=status&status=passed`);
+    assert.ok(r.body.counts.failed >= 1 && r.body.counts.passed >= 1);
+    assert.ok(r.body.items.every((x) => x.status === 'passed'));
+    r = await req('GET', `/bugs?project_id=${pay}&counts=status`);
+    assert.ok(r.body.counts.new >= 1);
+  });
+});

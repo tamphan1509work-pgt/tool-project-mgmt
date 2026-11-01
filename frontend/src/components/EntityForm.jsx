@@ -5,6 +5,7 @@ import { FilePicker } from './Attachments.jsx';
 import { categoryTree } from '../categories.js';
 import DocumentsField from './DocumentsField.jsx';
 import RichTextEditor from './RichText.jsx';
+import { AvatarField } from './Avatar.jsx';
 
 const REF_RESOURCE = {
   meetings: 'meetings',
@@ -89,6 +90,8 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
         </select>
       );
     }
+    case 'avatar':
+      return <AvatarField id={id} value={value} onChange={onChange} name={record?.name} />;
     case 'richtext':
       return <RichTextEditor id={id} value={value} onChange={onChange} placeholder={field.placeholder} />;
     case 'documents':

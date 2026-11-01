@@ -92,7 +92,7 @@ export default function DetailPage({
   const tabList = data
     ? [
         { key: '', label: 'Chi tiết' },
-        ...(tabs?.(data) ?? []).filter(Boolean),
+        ...(tabs?.(data, { reload, update }) ?? []).filter(Boolean),
         ...(history && historyTab
           ? [
               {

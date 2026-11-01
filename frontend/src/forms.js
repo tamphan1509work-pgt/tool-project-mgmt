@@ -191,6 +191,7 @@ export const documentFields = [
 ];
 
 export const memberFields = [
+  { name: 'avatar', label: 'Ảnh đại diện', type: 'avatar', full: true },
   { name: 'name', label: 'Họ tên', required: true },
   { name: 'position', label: 'Chức danh', placeholder: 'VD: Backend Developer' },
   { name: 'email', label: 'Email', placeholder: 'ten@congty.com' },

@@ -114,6 +114,13 @@ export function validate(db, fields, body, { partial = false } = {}) {
         v = ids;
         break;
       }
+      case 'avatar':
+        // Ảnh đại diện: data URL ảnh PNG / JPEG / WebP, tối đa ~200 KB
+        if (typeof v !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(v) || v.length > 280000) {
+          errors[name] = 'Ảnh đại diện không hợp lệ (PNG/JPEG/WebP, tối đa 200 KB)';
+          continue;
+        }
+        break;
       case 'boolean':
         if (![true, false, 0, 1, '0', '1', 'true', 'false'].includes(v)) {
           errors[name] = 'Phải là đúng / sai';
@@ -390,6 +397,7 @@ export function createResource(db, cfg) {
       // Xoá dự án thì lịch sử của dự án cũng bị xoá theo (FK), nên không ghi thêm
       if (table !== 'projects') log(req, row, 'delete', { summary: `Xoá ${cfg.label} "${nameOf(row)}"` });
       db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+      if (cfg.commentable) db.prepare('DELETE FROM comments WHERE entity = ? AND entity_id = ?').run(entity, id);
     });
     res.status(204).end();
   });

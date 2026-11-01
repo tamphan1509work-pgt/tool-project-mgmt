@@ -1,3 +1,4 @@
+import { Avatar } from '../components/Avatar.jsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
@@ -199,6 +200,12 @@ function MemberTable({ onChanged }) {
           )
         }
         columns={[
+          {
+            key: 'avatar',
+            title: 'Avatar',
+            width: 64,
+            render: (m) => <Avatar name={m.name} src={m.avatar} size={34} />,
+          },
           { key: 'name', title: 'Họ tên', sort: 'name', className: 'nowrap', render: (m) => <strong>{m.name}</strong> },
           {
             key: 'position',
@@ -507,7 +514,12 @@ export function MemberDetail() {
       scoped={false}
       nameOf={(m) => m.name}
       onChanged={refreshLookup}
-      badges={(m) => m.position && <span className="badge badge-gray">{m.position}</span>}
+      badges={(m) => (
+        <>
+          <Avatar name={m.name} src={m.avatar} size={40} />
+          {m.position && <span className="badge badge-gray">{m.position}</span>}
+        </>
+      )}
     >
       {(m, { reload }) => {
         const openTasks = m.tasks.filter((t) => !isClosed(t.status));

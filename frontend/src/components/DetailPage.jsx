@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code, fmtDateTime } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
+import CopyLinkButton from './CopyLink.jsx';
 import EntityForm, { splitFiles } from './EntityForm.jsx';
 import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
 
@@ -110,6 +111,7 @@ export default function DetailPage({
           </div>
         </div>
         <div className="detail-actions no-print">
+          <CopyLinkButton resource={resource} id={data.id} label={codeOf(data)} />
           {actions?.(data, { update, reload })}
           <button className="btn" onClick={() => setEditing(true)}>
             <Icon name="edit" size={16} /> Sửa

@@ -385,7 +385,44 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
          AND status IN ('new','in_progress','reopened')`,
       )
       .get(project.id).n;
-    res.json({ summary: rate(summary), byModule: byModule.map(rate), lastRun, openBugsFromTests });
+    const groupBy = (col, order) =>
+      db
+        .prepare(`SELECT ${col} AS key, ${statusCase} FROM test_cases WHERE project_id = ? GROUP BY ${col} ORDER BY ${order}`)
+        .all(project.id)
+        .map(rate);
+    const byPriority = groupBy(
+      'priority',
+      `CASE priority ${ENUMS.priority.map((v, i) => `WHEN '${v}' THEN ${-i}`).join(' ')} END`,
+    );
+    const byType = groupBy('type', 'total DESC');
+    // Theo người chạy: mỗi lần chạy là một lượt thực thi
+    const byTester = db
+      .prepare(
+        `SELECT COALESCE(NULLIF(r.executed_by, ''), '(Không ghi tên)') AS key, COUNT(*) AS runs,
+           SUM(r.result = 'passed') AS passed, SUM(r.result = 'failed') AS failed, SUM(r.result = 'blocked') AS blocked,
+           MAX(r.executed_at) AS last_at
+         FROM test_runs r JOIN test_cases t ON t.id = r.test_case_id
+         WHERE t.project_id = ? GROUP BY 1 ORDER BY runs DESC, key`,
+      )
+      .all(project.id);
+    const recentRuns = db
+      .prepare(
+        `SELECT r.id, r.result, r.executed_by, r.executed_at, r.note, t.id AS test_case_id, t.title,
+           (SELECT COUNT(*) FROM attachments a WHERE a.test_run_id = r.id) AS attachment_count
+         FROM test_runs r JOIN test_cases t ON t.id = r.test_case_id
+         WHERE t.project_id = ? ORDER BY r.executed_at DESC, r.id DESC LIMIT 10`,
+      )
+      .all(project.id);
+    res.json({
+      summary: rate(summary),
+      byModule: byModule.map(rate),
+      byPriority,
+      byType,
+      byTester,
+      recentRuns,
+      lastRun,
+      openBugsFromTests,
+    });
   });
 
   // ---- CRUD ----

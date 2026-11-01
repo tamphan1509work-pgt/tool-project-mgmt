@@ -591,3 +591,8 @@ input:focus, select:focus, textarea:focus {
 
 .run-table td.prose { min-width: 180px; }
 .run-table td .file-chips { max-width: 210px; }
+
+/* ---------- Copy link & tab thống kê ---------- */
+.share-input { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.report-stats { display: flex; flex-direction: column; gap: 16px; }
+.report-stats .report { margin-bottom: 0; }

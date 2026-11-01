@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { resetDemo } from './api.js';
+import { hashToPath, pathToHash } from './links.js';
 import { Empty, Icon, Loading } from './components/ui.jsx';
 import { ConfirmProvider, LookupProvider, ProjectProvider, ToastProvider, useConfirm, useProject } from './context.jsx';
 import { BugDetail, BugList } from './pages/Bugs.jsx';
@@ -100,6 +101,29 @@ function RequireProject({ children }) {
   return children;
 }
 
+/** Bản demo: giữ "#tên" trên thanh địa chỉ khớp với trang đang xem và ngược lại */
+function DemoHashSync() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const name = pathToHash(pathname);
+    try {
+      window.history.replaceState(null, '', name ? `#${name}` : window.location.pathname + window.location.search);
+    } catch {
+      // khung nhúng có thể chặn; bỏ qua
+    }
+  }, [pathname]);
+  useEffect(() => {
+    const onHash = () => {
+      const path = hashToPath(window.location.hash);
+      if (path) navigate(path);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [navigate]);
+  return null;
+}
+
 function DemoBanner({ onReset }) {
   const confirm = useConfirm();
   const reset = async () => {
@@ -160,6 +184,7 @@ function Layout({ children, onReset }) {
           </button>
           <h1 className="page-title">{title}</h1>
           {import.meta.env.MODE === 'demo' && <DemoBanner onReset={onReset} />}
+          {import.meta.env.MODE === 'demo' && <DemoHashSync />}
         </header>
         <main className="content">{children}</main>
       </div>

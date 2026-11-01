@@ -252,6 +252,10 @@ describe('test cases, runs & report', () => {
     assert.equal(a.pass_rate, 50);
     assert.ok(r.body.byModule.some((m) => m.module === '(Chưa phân loại)'));
     assert.equal((await req('GET', '/test-report')).status, 400);
+    assert.equal(r.body.byType.find((x) => x.key === 'functional').total, 4);
+    assert.equal(r.body.byPriority[0].key, 'medium');
+    assert.equal(r.body.byTester[0].runs, 3);
+    assert.equal(r.body.recentRuns.length, 3);
   });
 });
 

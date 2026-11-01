@@ -8,6 +8,8 @@ import { build } from 'vite';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'dist-demo');
 
+// Link artifact của bản demo: dùng để tạo link chia sẻ "<link>#tasks-12"
+process.env.VITE_SHARE_URL ??= 'https://claude.ai/artifact/3dsZN219LrYNzyrPgFe9CT';
 await build({ root, mode: 'demo', logLevel: 'warn' });
 
 const html = readFileSync(join(out, 'index.html'), 'utf8');

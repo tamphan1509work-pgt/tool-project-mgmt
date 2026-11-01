@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
+import CopyLinkButton from './CopyLink.jsx';
 import EntityForm, { splitFiles } from './EntityForm.jsx';
 import { Empty, ErrorBox, Icon, Loading, Modal, Pagination } from './ui.jsx';
 
@@ -233,7 +234,7 @@ export default function ResourceList({
                       {c.sort && sort === c.sort && <span className="sort-ind">{order === 'asc' ? '▲' : '▼'}</span>}
                     </th>
                   ))}
-                  <th style={{ width: 84 }} />
+                  <th style={{ width: 116 }} />
                 </tr>
               </thead>
               <tbody>
@@ -251,6 +252,7 @@ export default function ResourceList({
                       </td>
                     ))}
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                      <CopyLinkButton compact resource={resource} id={row.id} label={codeOf(row)} />
                       <button className="icon-btn" title="Sửa" onClick={() => startEdit(row)}>
                         <Icon name="edit" size={16} />
                       </button>

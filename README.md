@@ -1,17 +1,19 @@
 # Project Hub – Quản lý dự án phần mềm
 
-Ứng dụng web quản lý dự án phần mềm gồm 4 phân hệ chính, liên kết chặt chẽ với nhau:
+Ứng dụng web quản lý **nhiều dự án** phần mềm. Mỗi dự án có thành viên với vai trò riêng, và toàn bộ dữ liệu bên dưới được quản lý theo dự án:
 
 | Phân hệ | Chức năng |
 |---|---|
-| **Meeting minutes** | Ghi biên bản họp (agenda, nội dung, quyết định, thành phần), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
-| **Task** | Quản lý task dạng bảng hoặc **Kanban kéo-thả**, độ ưu tiên, người thực hiện, hạn, ước lượng, cảnh báo quá hạn, liên kết với cuộc họp |
-| **Test case** | Viết test case (module, loại, điều kiện, các bước, kết quả mong đợi), **thực thi test** (Đạt / Không đạt / Bị chặn) với lịch sử chạy, liên kết task |
-| **Bug** | Theo dõi bug (mức độ, ưu tiên, môi trường, các bước tái hiện…), quy trình trạng thái *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
+| **Dự án & thành viên** | Danh sách dự án (mã, tên, trạng thái, thời gian), số task/bug đang mở. Trong từng dự án: thêm thành viên (chọn người có sẵn hoặc tạo mới), gán **vai trò trong dự án** (PM, BA, Tech lead, Developer, Tester, Designer, DevOps, Stakeholder), đổi vai trò, gỡ thành viên. Một người có thể tham gia nhiều dự án với vai trò khác nhau |
+| **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
+| **Task** | Dạng bảng hoặc **Kanban kéo-thả**, ưu tiên, người thực hiện, hạn, cảnh báo quá hạn, liên kết cuộc họp và **liên kết tài liệu** thiết kế / đặc tả |
+| **Test report** | Báo cáo kiểm thử của dự án: tỉ lệ đạt, tiến độ thực thi, tổng hợp theo module; danh sách test case, **thực thi test** (Đạt / Không đạt / Bị chặn) với lịch sử chạy |
+| **Bug** | Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
+| **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
 
-Ngoài ra có trang **Tổng quan** (dashboard): số liệu tổng hợp, tỉ lệ test đạt, phân bố trạng thái, task quá hạn / sắp đến hạn, bug nghiêm trọng, cuộc họp sắp tới.
+Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Dự án đang làm việc được chọn ở thanh bên trái.
 
-Tất cả danh sách đều hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL nên có thể chia sẻ link.
+Mọi bảng có cột **STT**; danh sách hỗ trợ tìm kiếm (kể cả theo mã như `BUG-12`, `TC-003`), lọc, sắp xếp, phân trang; bộ lọc lưu trên URL.
 
 ## Công nghệ
 
@@ -81,20 +83,25 @@ frontend/
 
 ## REST API
 
-Tất cả endpoint nằm dưới `/api`. `{resource}` là một trong `meetings`, `tasks`, `test-cases`, `bugs`.
+Tất cả endpoint nằm dưới `/api`. `{resource}` là một trong `projects`, `members`, `meetings`, `tasks`, `test-cases`, `bugs`, `documents`.
+
+Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự án: khi tạo phải gửi `project_id` (không đổi được sau đó), khi liệt kê lọc bằng `?project_id=`. Các liên kết (cuộc họp, task, test case, tài liệu) phải cùng dự án.
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
 | GET | `/{resource}` | Danh sách. Query: `q`, các bộ lọc (VD `status=new,reopened`, `assignee=...`, `meeting_id=none`), `sort`, `order=asc\|desc`, `limit`, `offset`. Trả về `{ items, total, limit, offset }` |
 | GET | `/{resource}/:id` | Chi tiết, kèm dữ liệu liên quan (action items, test runs, bug liên kết…) |
-| POST | `/{resource}` | Tạo mới |
+| POST | `/{resource}` | Tạo mới. Task nhận thêm `document_ids: [..]` để liên kết tài liệu |
 | PATCH / PUT | `/{resource}/:id` | Cập nhật (chỉ các field gửi lên) |
 | DELETE | `/{resource}/:id` | Xoá |
 | POST | `/test-cases/:id/runs` | Ghi nhận một lần chạy test `{ result: passed\|failed\|blocked, note, executed_by }` – tự cập nhật trạng thái test case |
 | GET | `/test-cases/:id/runs` | Lịch sử chạy |
 | DELETE | `/test-runs/:id` | Xoá một lần chạy (trạng thái test case được tính lại) |
-| GET | `/dashboard` | Số liệu tổng quan |
-| GET | `/lookup` | Danh sách rút gọn cho dropdown (meetings, tasks, test cases, người, module) |
+| GET / POST | `/projects/:id/members` | Danh sách / thêm thành viên dự án `{ member_id }` hoặc `{ name, email }` kèm `role` |
+| PATCH / DELETE | `/projects/:id/members/:memberId` | Đổi vai trò `{ role }` / gỡ khỏi dự án |
+| GET | `/test-report?project_id=` | Báo cáo test: tổng hợp, theo module, tỉ lệ đạt, tiến độ |
+| GET | `/dashboard?project_id=` | Số liệu tổng quan của dự án |
+| GET | `/lookup?project_id=` | Danh sách rút gọn cho dropdown (dự án, thành viên, meetings, tasks, test cases, tài liệu, người, module) |
 | GET | `/enums` | Các giá trị enum hợp lệ |
 
 Bộ lọc đặc biệt: `GET /tasks?overdue=true`, `GET /bugs?open=true`, `GET /meetings?from=YYYY-MM-DD&to=YYYY-MM-DD`.
@@ -109,10 +116,14 @@ Lỗi validate trả về `400` dạng `{ "error": "Dữ liệu không hợp l�
 - Trạng thái test case: `not_run`, `passed`, `failed`, `blocked`
 - Mức độ bug: `minor`, `major`, `critical`, `blocker`
 - Trạng thái bug: `new`, `in_progress`, `resolved`, `closed`, `reopened`, `rejected`
+- Trạng thái dự án: `planning`, `active`, `on_hold`, `completed`, `cancelled`
+- Vai trò thành viên: `pm`, `ba`, `tech_lead`, `developer`, `tester`, `designer`, `devops`, `stakeholder`
+- Loại tài liệu: `design`, `specification`; trạng thái: `draft`, `in_review`, `approved`, `obsolete`
+
+Database từ phiên bản cũ (chưa có dự án) được tự động nâng cấp khi khởi động: dữ liệu cũ được gom vào dự án **Dự án mặc định** (`DEFAULT`).
 
 ## Hướng phát triển tiếp
 
 - Đăng nhập / phân quyền người dùng, quản lý thành viên
-- Nhiều dự án (project) trong cùng một hệ thống
 - Bình luận, đính kèm file, lịch sử thay đổi
 - Test suite / test plan theo sprint, sprint & milestone

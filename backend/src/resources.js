@@ -8,7 +8,14 @@ export const ENUMS = {
   testResult: ['passed', 'failed', 'blocked'],
   bugSeverity: ['minor', 'major', 'critical', 'blocker'],
   bugStatus: ['new', 'in_progress', 'resolved', 'closed', 'reopened', 'rejected'],
+  projectStatus: ['planning', 'active', 'on_hold', 'completed', 'cancelled'],
+  memberRole: ['pm', 'ba', 'tech_lead', 'developer', 'tester', 'designer', 'devops', 'stakeholder'],
+  documentType: ['design', 'specification'],
+  documentStatus: ['draft', 'in_review', 'approved', 'obsolete'],
 };
+
+// project_id: bắt buộc khi tạo, không đổi được sau đó
+const projectRef = { type: 'ref', table: 'projects', required: true, createOnly: true };
 
 const rank = (col, values) =>
   `CASE ${col} ${values.map((v, i) => `WHEN '${v}' THEN ${i}`).join(' ')} ELSE -1 END`;
@@ -21,6 +28,7 @@ export const meetings = {
   table: 'meetings',
   label: 'cuộc họp',
   fields: {
+    project_id: projectRef,
     title: { type: 'string', required: true },
     meeting_date: { type: 'date', required: true },
     start_time: { type: 'time' },
@@ -32,7 +40,7 @@ export const meetings = {
     decisions: { type: 'text' },
   },
   searchable: ['title', 'attendees', 'agenda', 'notes', 'decisions', 'location'],
-  filterable: [],
+  filterable: ['project_id'],
   sortable: { meeting_date: "meeting_date || ' ' || COALESCE(start_time, '')", title: 'title', ...timestamps },
   defaultSort: 'meeting_date',
   extraFilters(query, where, params) {
@@ -58,6 +66,7 @@ export const tasks = {
   table: 'tasks',
   label: 'task',
   fields: {
+    project_id: projectRef,
     title: { type: 'string', required: true },
     description: { type: 'text' },
     status: { type: 'enum', values: ENUMS.taskStatus, default: 'todo' },
@@ -66,10 +75,18 @@ export const tasks = {
     start_date: { type: 'date' },
     due_date: { type: 'date' },
     estimate_hours: { type: 'number' },
-    meeting_id: { type: 'ref', table: 'meetings' },
+    meeting_id: { type: 'ref', table: 'meetings', sameProject: true },
+    document_ids: {
+      type: 'refs',
+      table: 'documents',
+      joinTable: 'task_documents',
+      ownKey: 'task_id',
+      otherKey: 'document_id',
+      sameProject: true,
+    },
   },
   searchable: ['title', 'description', 'assignee'],
-  filterable: ['status', 'priority', 'assignee', 'meeting_id'],
+  filterable: ['project_id', 'status', 'priority', 'assignee', 'meeting_id'],
   sortable: {
     due_date: "COALESCE(due_date, '9999-12-31')",
     priority: rank('priority', ENUMS.priority),
@@ -109,6 +126,7 @@ export const tasks = {
       bugs: db
         .prepare('SELECT id, title, status, severity FROM bugs WHERE task_id = ? ORDER BY id')
         .all(row.id),
+      ...linkedDocuments(db, row.id),
     };
   },
 };
@@ -117,6 +135,7 @@ export const testCases = {
   table: 'test_cases',
   label: 'test case',
   fields: {
+    project_id: projectRef,
     title: { type: 'string', required: true },
     module: { type: 'string' },
     type: { type: 'enum', values: ENUMS.testType, default: 'functional' },
@@ -125,10 +144,10 @@ export const testCases = {
     preconditions: { type: 'text' },
     steps: { type: 'text' },
     expected_result: { type: 'text' },
-    task_id: { type: 'ref', table: 'tasks' },
+    task_id: { type: 'ref', table: 'tasks', sameProject: true },
   },
   searchable: ['title', 'module', 'steps', 'expected_result'],
-  filterable: ['status', 'priority', 'type', 'module', 'task_id'],
+  filterable: ['project_id', 'status', 'priority', 'type', 'module', 'task_id'],
   sortable: {
     priority: rank('priority', ENUMS.priority),
     status: rank('status', ENUMS.testStatus),
@@ -163,6 +182,7 @@ export const bugs = {
   table: 'bugs',
   label: 'bug',
   fields: {
+    project_id: projectRef,
     title: { type: 'string', required: true },
     description: { type: 'text' },
     steps_to_reproduce: { type: 'text' },
@@ -174,11 +194,11 @@ export const bugs = {
     status: { type: 'enum', values: ENUMS.bugStatus, default: 'new' },
     assignee: { type: 'string' },
     reporter: { type: 'string' },
-    test_case_id: { type: 'ref', table: 'test_cases' },
-    task_id: { type: 'ref', table: 'tasks' },
+    test_case_id: { type: 'ref', table: 'test_cases', sameProject: true },
+    task_id: { type: 'ref', table: 'tasks', sameProject: true },
   },
   searchable: ['title', 'description', 'steps_to_reproduce', 'actual_result', 'environment', 'assignee', 'reporter'],
-  filterable: ['status', 'severity', 'priority', 'assignee', 'test_case_id', 'task_id'],
+  filterable: ['project_id', 'status', 'severity', 'priority', 'assignee', 'test_case_id', 'task_id'],
   sortable: {
     severity: rank('severity', ENUMS.bugSeverity),
     priority: rank('priority', ENUMS.priority),
@@ -202,6 +222,162 @@ export const bugs = {
         ? db.prepare('SELECT id, title, status FROM test_cases WHERE id = ?').get(row.test_case_id) ?? null
         : null,
       task: row.task_id ? db.prepare('SELECT id, title, status FROM tasks WHERE id = ?').get(row.task_id) ?? null : null,
+    };
+  },
+};
+
+function linkedDocuments(db, taskId) {
+  const documents = db
+    .prepare(
+      `SELECT d.id, d.title, d.type, d.version, d.status, d.url FROM documents d
+       JOIN task_documents td ON td.document_id = d.id WHERE td.task_id = ? ORDER BY d.type, d.title`,
+    )
+    .all(taskId);
+  return { documents, document_ids: documents.map((d) => d.id) };
+}
+
+const endAfterStart = (data, existing) => {
+  const start = data.start_date !== undefined ? data.start_date : existing?.start_date;
+  const end = data.end_date !== undefined ? data.end_date : existing?.end_date;
+  if (start && end && end < start) {
+    throw new HttpError(400, 'Dữ liệu không hợp lệ', { end_date: 'Ngày kết thúc không được trước ngày bắt đầu' });
+  }
+};
+
+export const projects = {
+  table: 'projects',
+  label: 'dự án',
+  fields: {
+    code: {
+      type: 'string',
+      required: true,
+      uppercase: true,
+      max: 12,
+      pattern: /^[A-Z][A-Z0-9_-]{1,11}$/,
+      patternMessage: 'Mã dự án 2–12 ký tự, bắt đầu bằng chữ cái, chỉ gồm chữ, số, - và _',
+    },
+    name: { type: 'string', required: true },
+    description: { type: 'text' },
+    status: { type: 'enum', values: ENUMS.projectStatus, default: 'active' },
+    start_date: { type: 'date' },
+    end_date: { type: 'date' },
+  },
+  selectExtra: `
+    (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = projects.id) AS member_count,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = projects.id) AS task_count,
+    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = projects.id AND t.status <> 'done') AS open_task_count,
+    (SELECT COUNT(*) FROM bugs b WHERE b.project_id = projects.id AND b.status IN ('new','in_progress','reopened')) AS open_bug_count`,
+  searchable: ['code', 'name', 'description'],
+  filterable: ['status'],
+  sortable: {
+    code: 'code',
+    name: 'name',
+    status: rank('status', ENUMS.projectStatus),
+    start_date: "COALESCE(start_date, '')",
+    end_date: "COALESCE(end_date, '')",
+    ...timestamps,
+  },
+  defaultSort: 'created_at',
+  beforeSave: endAfterStart,
+  expand(db, row) {
+    const one = (sql) => db.prepare(sql).get(row.id).n;
+    return {
+      members: projectMembers(db, row.id),
+      stats: {
+        meetings: one('SELECT COUNT(*) AS n FROM meetings WHERE project_id = ?'),
+        tasks: one('SELECT COUNT(*) AS n FROM tasks WHERE project_id = ?'),
+        doneTasks: one("SELECT COUNT(*) AS n FROM tasks WHERE project_id = ? AND status = 'done'"),
+        testCases: one('SELECT COUNT(*) AS n FROM test_cases WHERE project_id = ?'),
+        passedTests: one("SELECT COUNT(*) AS n FROM test_cases WHERE project_id = ? AND status = 'passed'"),
+        bugs: one('SELECT COUNT(*) AS n FROM bugs WHERE project_id = ?'),
+        openBugs: one("SELECT COUNT(*) AS n FROM bugs WHERE project_id = ? AND status IN ('new','in_progress','reopened')"),
+        documents: one('SELECT COUNT(*) AS n FROM documents WHERE project_id = ?'),
+      },
+    };
+  },
+};
+
+export function projectMembers(db, projectId) {
+  return db
+    .prepare(
+      `SELECT m.id, m.name, m.email, m.phone, pm.role, pm.joined_at
+       FROM project_members pm JOIN members m ON m.id = pm.member_id
+       WHERE pm.project_id = ?
+       ORDER BY ${rank('pm.role', ENUMS.memberRole)}, m.name`,
+    )
+    .all(projectId);
+}
+
+export const members = {
+  table: 'members',
+  label: 'thành viên',
+  fields: {
+    name: { type: 'string', required: true },
+    email: {
+      type: 'string',
+      pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      patternMessage: 'Email không hợp lệ',
+    },
+    phone: { type: 'string', max: 30 },
+  },
+  selectExtra: '(SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count',
+  searchable: ['name', 'email', 'phone'],
+  filterable: [],
+  sortable: { name: 'name', ...timestamps },
+  defaultSort: 'name',
+  defaultOrder: 'ASC',
+  expand(db, row) {
+    return {
+      projects: db
+        .prepare(
+          `SELECT p.id, p.code, p.name, pm.role FROM project_members pm JOIN projects p ON p.id = pm.project_id
+           WHERE pm.member_id = ? ORDER BY p.name`,
+        )
+        .all(row.id),
+    };
+  },
+};
+
+export const projectMember = {
+  member_id: { type: 'ref', table: 'members' },
+  name: { type: 'string' },
+  email: members.fields.email,
+  role: { type: 'enum', values: ENUMS.memberRole, default: 'developer' },
+};
+
+export const documents = {
+  table: 'documents',
+  label: 'tài liệu',
+  fields: {
+    project_id: projectRef,
+    title: { type: 'string', required: true },
+    type: { type: 'enum', values: ENUMS.documentType, default: 'specification' },
+    version: { type: 'string', max: 30 },
+    status: { type: 'enum', values: ENUMS.documentStatus, default: 'draft' },
+    url: { type: 'url' },
+    author: { type: 'string' },
+    description: { type: 'text' },
+  },
+  selectExtra:
+    '(SELECT COUNT(*) FROM task_documents td WHERE td.document_id = documents.id) AS task_count',
+  searchable: ['title', 'description', 'author', 'version'],
+  filterable: ['project_id', 'type', 'status', 'author'],
+  sortable: {
+    title: 'title',
+    type: 'type',
+    status: rank('status', ENUMS.documentStatus),
+    version: "COALESCE(version, '')",
+    ...timestamps,
+  },
+  defaultSort: 'updated_at',
+  expand(db, row) {
+    return {
+      tasks: db
+        .prepare(
+          `SELECT t.id, t.title, t.status, t.assignee FROM tasks t
+           JOIN task_documents td ON td.task_id = t.id WHERE td.document_id = ? ORDER BY t.id`,
+        )
+        .all(row.id),
     };
   },
 };

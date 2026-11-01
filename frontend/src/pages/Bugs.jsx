@@ -37,11 +37,41 @@ export function BugList() {
       ]}
       columns={[
         { key: 'title', title: 'Tiêu đề', sort: 'title', render: (b) => <strong>{b.title}</strong> },
-        { key: 'severity', title: 'Mức độ', sort: 'severity', width: 130, render: (b) => <Badge kind="bugSeverity" value={b.severity} /> },
-        { key: 'priority', title: 'Ưu tiên', sort: 'priority', width: 120, render: (b) => <Badge kind="priority" value={b.priority} /> },
-        { key: 'status', title: 'Trạng thái', sort: 'status', width: 120, render: (b) => <Badge kind="bugStatus" value={b.status} /> },
-        { key: 'assignee', title: 'Người xử lý', width: 150, render: (b) => b.assignee || <span className="muted">Chưa giao</span> },
-        { key: 'created_at', title: 'Ngày tạo', sort: 'created_at', width: 130, className: 'muted small', render: (b) => fmtDateTime(b.created_at) },
+        {
+          key: 'severity',
+          title: 'Mức độ',
+          sort: 'severity',
+          width: 130,
+          render: (b) => <Badge kind="bugSeverity" value={b.severity} />,
+        },
+        {
+          key: 'priority',
+          title: 'Ưu tiên',
+          sort: 'priority',
+          width: 120,
+          render: (b) => <Badge kind="priority" value={b.priority} />,
+        },
+        {
+          key: 'status',
+          title: 'Trạng thái',
+          sort: 'status',
+          width: 120,
+          render: (b) => <Badge kind="bugStatus" value={b.status} />,
+        },
+        {
+          key: 'assignee',
+          title: 'Người xử lý',
+          width: 150,
+          render: (b) => b.assignee || <span className="muted">Chưa giao</span>,
+        },
+        {
+          key: 'created_at',
+          title: 'Ngày tạo',
+          sort: 'created_at',
+          width: 130,
+          className: 'muted small',
+          render: (b) => fmtDateTime(b.created_at),
+        },
       ]}
     />
   );

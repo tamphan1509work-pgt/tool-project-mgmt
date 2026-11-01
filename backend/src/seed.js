@@ -12,8 +12,21 @@ const day = (offset) => {
   return d.toLocaleDateString('sv');
 };
 
+const TABLES = [
+  'task_documents',
+  'test_runs',
+  'bugs',
+  'test_cases',
+  'tasks',
+  'meetings',
+  'documents',
+  'project_members',
+  'members',
+  'projects',
+];
+
 export function seed(db, { reset = false } = {}) {
-  const hasData = db.prepare('SELECT COUNT(*) AS n FROM meetings').get().n > 0;
+  const hasData = db.prepare('SELECT COUNT(*) AS n FROM projects').get().n > 0;
   if (hasData && !reset) {
     console.log('Database đã có dữ liệu. Dùng --reset để xoá và tạo lại.');
     return false;
@@ -21,7 +34,7 @@ export function seed(db, { reset = false } = {}) {
 
   transaction(db, () => {
     if (reset) {
-      for (const t of ['test_runs', 'bugs', 'test_cases', 'tasks', 'meetings']) db.exec(`DELETE FROM ${t}`);
+      for (const t of TABLES) db.exec(`DELETE FROM ${t}`);
       db.exec('DELETE FROM sqlite_sequence');
     }
 
@@ -33,20 +46,118 @@ export function seed(db, { reset = false } = {}) {
       return Number(info.lastInsertRowid);
     };
 
+    // ---------- Dự án ----------
+    const pay = insert('projects', {
+      code: 'PAY',
+      name: 'Cổng thanh toán v2',
+      description: 'Thay thế cổng thanh toán cũ, hỗ trợ thẻ nội địa, ví điện tử và thanh toán QR.',
+      status: 'active',
+      start_date: day(-21),
+      end_date: day(70),
+    });
+    const crm = insert('projects', {
+      code: 'CRM',
+      name: 'Ứng dụng CRM nội bộ',
+      description: 'Quản lý khách hàng, cơ hội bán hàng và lịch chăm sóc cho đội kinh doanh.',
+      status: 'planning',
+      start_date: day(10),
+      end_date: day(120),
+    });
+
+    // ---------- Thành viên & vai trò ----------
+    const people = {};
+    for (const [name, email] of [
+      ['Nguyễn Văn An', 'an.nguyen@example.com'],
+      ['Trần Thị Bình', 'binh.tran@example.com'],
+      ['Lê Minh Châu', 'chau.le@example.com'],
+      ['Phạm Thu Dung', 'dung.pham@example.com'],
+      ['Hoàng Gia Huy', 'huy.hoang@example.com'],
+      ['Vũ Ngọc Lan', 'lan.vu@example.com'],
+      ['Đỗ Quang Minh', 'minh.do@example.com'],
+    ]) {
+      people[name] = insert('members', { name, email });
+    }
+    const join = (project, name, role) =>
+      insert('project_members', { project_id: project, member_id: people[name], role, joined_at: day(-21) });
+    join(pay, 'Nguyễn Văn An', 'pm');
+    join(pay, 'Trần Thị Bình', 'ba');
+    join(pay, 'Lê Minh Châu', 'tech_lead');
+    join(pay, 'Hoàng Gia Huy', 'developer');
+    join(pay, 'Vũ Ngọc Lan', 'developer');
+    join(pay, 'Phạm Thu Dung', 'tester');
+    join(pay, 'Đỗ Quang Minh', 'designer');
+    join(crm, 'Trần Thị Bình', 'pm');
+    join(crm, 'Lê Minh Châu', 'tech_lead');
+    join(crm, 'Phạm Thu Dung', 'tester');
+
+    // ---------- Tài liệu ----------
+    const doc = (row) => insert('documents', row);
+    const dSrs = doc({
+      project_id: pay,
+      title: 'Đặc tả yêu cầu phần mềm (SRS) – Cổng thanh toán',
+      type: 'specification',
+      version: '1.2',
+      status: 'approved',
+      url: 'https://docs.example.com/pay/srs',
+      author: 'Trần Thị Bình',
+      description: 'Yêu cầu chức năng và phi chức năng: thanh toán thẻ, OTP, hoàn tiền, đối soát.',
+    });
+    const dApi = doc({
+      project_id: pay,
+      title: 'Đặc tả API thanh toán (OpenAPI)',
+      type: 'specification',
+      version: '0.9',
+      status: 'in_review',
+      url: 'https://docs.example.com/pay/api',
+      author: 'Lê Minh Châu',
+      description: 'Endpoint khởi tạo giao dịch, callback, truy vấn trạng thái, mã lỗi.',
+    });
+    const dArch = doc({
+      project_id: pay,
+      title: 'Thiết kế kiến trúc hệ thống',
+      type: 'design',
+      version: '1.0',
+      status: 'approved',
+      url: 'https://docs.example.com/pay/architecture',
+      author: 'Lê Minh Châu',
+      description: 'Sơ đồ service, message queue, cơ sở dữ liệu, luồng callback.',
+    });
+    const dUi = doc({
+      project_id: pay,
+      title: 'Thiết kế UI màn hình thanh toán & OTP',
+      type: 'design',
+      version: '2.1',
+      status: 'approved',
+      url: 'https://www.figma.com/file/example-pay-ui',
+      author: 'Đỗ Quang Minh',
+    });
+    doc({
+      project_id: crm,
+      title: 'Tài liệu đặc tả nghiệp vụ CRM',
+      type: 'specification',
+      version: '0.3',
+      status: 'draft',
+      url: 'https://docs.example.com/crm/brd',
+      author: 'Trần Thị Bình',
+    });
+
+    // ---------- Cuộc họp ----------
     const m1 = insert('meetings', {
+      project_id: pay,
       title: 'Kick-off dự án Cổng thanh toán v2',
       meeting_date: day(-14),
       start_time: '09:00',
       location: 'Phòng họp A3',
       facilitator: 'Nguyễn Văn An',
-      attendees: 'Nguyễn Văn An (PM), Trần Thị Bình (BA), Lê Minh Châu (Dev lead), Phạm Thu Dung (QA)',
+      attendees: 'Nguyễn Văn An (PM), Trần Thị Bình (BA), Lê Minh Châu (Tech lead), Phạm Thu Dung (QA)',
       agenda: '1. Mục tiêu & phạm vi dự án\n2. Kiến trúc tổng quan\n3. Kế hoạch sprint 1\n4. Phân công',
       notes:
-        'Dự án nhằm thay thế cổng thanh toán cũ, hỗ trợ thêm ví điện tử và QR.\nDev lead đề xuất tách service thanh toán riêng, giao tiếp qua message queue.\nQA cần môi trường staging trước khi bắt đầu sprint 2.',
+        'Dự án nhằm thay thế cổng thanh toán cũ, hỗ trợ thêm ví điện tử và QR.\nTech lead đề xuất tách service thanh toán riêng, giao tiếp qua message queue.\nQA cần môi trường staging trước khi bắt đầu sprint 2.',
       decisions:
         '- Sprint kéo dài 2 tuần, bắt đầu từ thứ Hai tới\n- Dùng PostgreSQL cho service thanh toán\n- Daily stand-up lúc 9h15',
     });
     const m2 = insert('meetings', {
+      project_id: pay,
       title: 'Sprint 1 Review & Retrospective',
       meeting_date: day(-2),
       start_time: '14:00',
@@ -59,6 +170,7 @@ export function seed(db, { reset = false } = {}) {
       decisions: '- Giới hạn PR tối đa 400 dòng\n- Ưu tiên sửa bug OTP trong tuần này',
     });
     insert('meetings', {
+      project_id: pay,
       title: 'Sprint 2 Planning',
       meeting_date: day(3),
       start_time: '09:30',
@@ -67,41 +179,69 @@ export function seed(db, { reset = false } = {}) {
       attendees: 'Toàn bộ team',
       agenda: '1. Rà soát backlog\n2. Ước lượng story\n3. Cam kết sprint 2',
     });
+    const mCrm = insert('meetings', {
+      project_id: crm,
+      title: 'Thu thập yêu cầu với phòng Kinh doanh',
+      meeting_date: day(1),
+      start_time: '10:00',
+      location: 'Phòng họp B1',
+      facilitator: 'Trần Thị Bình',
+      attendees: 'Trần Thị Bình, Lê Minh Châu, đại diện phòng Kinh doanh',
+      agenda: '1. Quy trình bán hàng hiện tại\n2. Khó khăn đang gặp\n3. Mong muốn với CRM',
+    });
 
-    const t = (row) => insert('tasks', row);
-    const t1 = t({
-      title: 'Thiết kế kiến trúc service thanh toán',
-      description: 'Vẽ sơ đồ kiến trúc, định nghĩa API giữa các service.',
-      status: 'done',
-      priority: 'high',
-      assignee: 'Lê Minh Châu',
-      start_date: day(-13),
-      due_date: day(-9),
-      estimate_hours: 16,
-      meeting_id: m1,
-      completed_at: `${day(-9)} 10:00:00`,
-    });
-    const t2 = t({
-      title: 'Xây dựng API thanh toán thẻ nội địa',
-      description: 'Tích hợp cổng NAPAS: khởi tạo giao dịch, callback, truy vấn trạng thái.',
-      status: 'review',
-      priority: 'critical',
-      assignee: 'Hoàng Gia Huy',
-      start_date: day(-9),
-      due_date: day(1),
-      estimate_hours: 40,
-      meeting_id: m1,
-    });
-    const t3 = t({
-      title: 'Màn hình nhập & xác nhận OTP',
-      status: 'in_progress',
-      priority: 'high',
-      assignee: 'Vũ Ngọc Lan',
-      start_date: day(-7),
-      due_date: day(-1),
-      estimate_hours: 12,
-    });
+    // ---------- Task ----------
+    const t = (row, docs = []) => {
+      const id = insert('tasks', row);
+      for (const d of docs) insert('task_documents', { task_id: id, document_id: d });
+      return id;
+    };
+    t(
+      {
+        project_id: pay,
+        title: 'Thiết kế kiến trúc service thanh toán',
+        description: 'Vẽ sơ đồ kiến trúc, định nghĩa API giữa các service.',
+        status: 'done',
+        priority: 'high',
+        assignee: 'Lê Minh Châu',
+        start_date: day(-13),
+        due_date: day(-9),
+        estimate_hours: 16,
+        meeting_id: m1,
+        completed_at: `${day(-9)} 10:00:00`,
+      },
+      [dArch, dSrs],
+    );
+    const t2 = t(
+      {
+        project_id: pay,
+        title: 'Xây dựng API thanh toán thẻ nội địa',
+        description: 'Tích hợp cổng NAPAS: khởi tạo giao dịch, callback, truy vấn trạng thái.',
+        status: 'review',
+        priority: 'critical',
+        assignee: 'Hoàng Gia Huy',
+        start_date: day(-9),
+        due_date: day(1),
+        estimate_hours: 40,
+        meeting_id: m1,
+      },
+      [dApi, dSrs, dArch],
+    );
+    const t3 = t(
+      {
+        project_id: pay,
+        title: 'Màn hình nhập & xác nhận OTP',
+        status: 'in_progress',
+        priority: 'high',
+        assignee: 'Vũ Ngọc Lan',
+        start_date: day(-7),
+        due_date: day(-1),
+        estimate_hours: 12,
+      },
+      [dUi, dSrs],
+    );
     t({
+      project_id: pay,
       title: 'Chuẩn bị môi trường staging',
       status: 'todo',
       priority: 'medium',
@@ -110,6 +250,7 @@ export function seed(db, { reset = false } = {}) {
       meeting_id: m1,
     });
     t({
+      project_id: pay,
       title: 'Áp dụng quy tắc PR tối đa 400 dòng vào CONTRIBUTING.md',
       status: 'todo',
       priority: 'low',
@@ -117,15 +258,37 @@ export function seed(db, { reset = false } = {}) {
       due_date: day(4),
       meeting_id: m2,
     });
+    t(
+      {
+        project_id: pay,
+        title: 'Viết test case cho luồng hoàn tiền',
+        status: 'todo',
+        priority: 'medium',
+        assignee: 'Phạm Thu Dung',
+        due_date: day(8),
+      },
+      [dSrs],
+    );
     t({
-      title: 'Viết test case cho luồng hoàn tiền',
+      project_id: crm,
+      title: 'Phỏng vấn người dùng phòng Kinh doanh',
+      status: 'todo',
+      priority: 'high',
+      assignee: 'Trần Thị Bình',
+      due_date: day(2),
+      meeting_id: mCrm,
+    });
+    t({
+      project_id: crm,
+      title: 'Đề xuất kiến trúc & công nghệ cho CRM',
       status: 'todo',
       priority: 'medium',
-      assignee: 'Phạm Thu Dung',
-      due_date: day(8),
+      assignee: 'Lê Minh Châu',
+      due_date: day(12),
     });
 
-    const tc = (row) => insert('test_cases', row);
+    // ---------- Test case & kết quả chạy ----------
+    const tc = (row) => insert('test_cases', { project_id: pay, ...row });
     const tc1 = tc({
       title: 'Thanh toán thành công bằng thẻ nội địa hợp lệ',
       module: 'Thanh toán',
@@ -138,7 +301,7 @@ export function seed(db, { reset = false } = {}) {
     });
     const tc2 = tc({
       title: 'Nhập sai OTP 3 lần thì khoá giao dịch',
-      module: 'Thanh toán',
+      module: 'OTP',
       type: 'functional',
       priority: 'high',
       steps: '1. Khởi tạo giao dịch\n2. Nhập sai OTP 3 lần liên tiếp',
@@ -147,14 +310,14 @@ export function seed(db, { reset = false } = {}) {
     });
     const tc3 = tc({
       title: 'OTP hết hạn sau 120 giây',
-      module: 'Thanh toán',
+      module: 'OTP',
       type: 'functional',
       priority: 'medium',
       steps: '1. Khởi tạo giao dịch\n2. Chờ 121 giây\n3. Nhập OTP',
       expected_result: 'Báo OTP hết hạn và cho phép gửi lại OTP.',
       task_id: t3,
     });
-    tc({
+    const tc4 = tc({
       title: 'API thanh toán phản hồi dưới 500ms với 200 request/giây',
       module: 'Hiệu năng',
       type: 'performance',
@@ -170,9 +333,18 @@ export function seed(db, { reset = false } = {}) {
       steps: '1. Thực hiện 1 giao dịch\n2. Kiểm tra log ứng dụng',
       expected_result: 'Số thẻ được che, chỉ hiện 4 số cuối.',
     });
+    tc({
+      title: 'Truy vấn trạng thái giao dịch theo mã',
+      module: 'Thanh toán',
+      type: 'integration',
+      priority: 'medium',
+      expected_result: 'Trả về đúng trạng thái giao dịch.',
+      task_id: t2,
+    });
 
+    let minute = 0;
     const run = (id, result, offset, note, by = 'Phạm Thu Dung') => {
-      const at = `${day(offset)} 10:${String(30 + offset + 20).padStart(2, '0')}:00`;
+      const at = `${day(offset)} 10:${String(10 + minute++).padStart(2, '0')}:00`;
       insert('test_runs', { test_case_id: id, result, note, executed_by: by, executed_at: at });
       db.prepare('UPDATE test_cases SET status = ?, last_run_at = ? WHERE id = ?').run(result, at, id);
     };
@@ -180,8 +352,10 @@ export function seed(db, { reset = false } = {}) {
     run(tc1, 'passed', -1, 'Đã fix, chạy lại OK');
     run(tc2, 'failed', -2, 'Lần thứ 3 vẫn cho nhập tiếp');
     run(tc3, 'blocked', -2, 'Chưa có môi trường staging để chỉnh thời gian OTP');
+    run(tc4, 'passed', -1, 'p95 = 320ms');
 
-    const b = (row) => insert('bugs', row);
+    // ---------- Bug ----------
+    const b = (row) => insert('bugs', { project_id: pay, ...row });
     b({
       title: 'Nhập sai OTP lần 3 không khoá giao dịch',
       description: 'Sau 3 lần nhập sai, người dùng vẫn có thể tiếp tục nhập OTP.',

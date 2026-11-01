@@ -46,6 +46,10 @@ export const api = {
   remove: (resource, id) => request('DELETE', `/${resource}/${id}`),
   addRun: (testCaseId, data) => request('POST', `/test-cases/${testCaseId}/runs`, data),
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
-  dashboard: () => request('GET', '/dashboard'),
-  lookup: () => request('GET', '/lookup'),
+  dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
+  testReport: (params) => request('GET', `/test-report${qs(params)}`),
+  lookup: (params) => request('GET', `/lookup${qs(params)}`),
+  addMember: (projectId, data) => request('POST', `/projects/${projectId}/members`, data),
+  updateMember: (projectId, memberId, data) => request('PATCH', `/projects/${projectId}/members/${memberId}`, data),
+  removeMember: (projectId, memberId) => request('DELETE', `/projects/${projectId}/members/${memberId}`),
 };

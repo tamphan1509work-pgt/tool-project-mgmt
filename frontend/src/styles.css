@@ -123,6 +123,7 @@ input:focus, select:focus, textarea:focus {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow-y: auto;
 }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--sidebar-strong); font-weight: 700; font-size: 17px; padding: 4px 10px 22px; }
 .brand:hover { text-decoration: none; }
@@ -372,3 +373,60 @@ input:focus, select:focus, textarea:focus {
   margin-left: auto; font-size: 12.5px; color: var(--t-amber-fg);
   background: var(--t-amber-bg); padding: 4px 6px 4px 12px; border-radius: 999px;
 }
+
+/* ---------- Dự án, tài liệu, STT ---------- */
+.col-stt { width: 52px; text-align: center !important; color: var(--muted); font-variant-numeric: tabular-nums; }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.text-success { color: var(--success); }
+.nav-sub { padding: 6px 12px 6px 40px; font-size: 13.5px; }
+.project-switcher { display: flex; flex-direction: column; gap: 4px; margin: 14px 4px 10px; padding-top: 12px; border-top: 1px solid var(--nav-hover); }
+.project-switcher label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 8px; }
+.project-switcher select {
+  width: 100%; background: var(--nav-hover); color: var(--sidebar-strong);
+  border-color: transparent; font-weight: 600;
+}
+.project-switcher select option { color: var(--text); background: var(--surface); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+.tabs button {
+  border: none; background: none; padding: 8px 14px; cursor: pointer; color: var(--muted); font-weight: 500;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+.tabs button:hover { color: var(--text); }
+.tabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.doc-link { white-space: nowrap; font-size: 13px; word-break: break-all; }
+
+.multiref {
+  border: 1px solid var(--border); border-radius: 8px; max-height: 220px; overflow-y: auto;
+  padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; background: var(--surface);
+}
+.multiref-group-title { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 4px; }
+.multiref-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-weight: 400 !important; font-size: 14px !important; }
+.multiref-empty { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; }
+
+.mini-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.mini-stat {
+  display: flex; flex-direction: column; padding: 10px 12px; border-radius: 8px;
+  background: var(--surface-2); color: var(--text);
+}
+.mini-stat:hover { text-decoration: none; outline: 1px solid var(--primary); }
+.mini-stat-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mini-stat-label { font-size: 13px; color: var(--muted); }
+.mini-stat-sub { font-size: 12px; color: var(--muted); }
+.member-form { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.member-form-title { font-weight: 600; font-size: 13px; }
+.member-form .inline-form { margin-top: 8px; }
+.member-form .inline-form select { min-width: 140px; }
+
+.project-banner {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 16px;
+}
+.project-banner h2 { font-size: 20px; }
+.project-banner-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.report { margin-bottom: 20px; }
+.report-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 14px; }
+.report-kpis { display: flex; flex-wrap: wrap; gap: 12px 36px; }
+.report-kpi { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.report-table tfoot td { border-top: 2px solid var(--border); border-bottom: none; background: var(--surface-2); }
+.list-heading { font-size: 15px; margin-bottom: 10px; }

@@ -4,14 +4,120 @@ import { api } from '../api.js';
 import DetailPage, { InfoList, LinkedList, Section } from '../components/DetailPage.jsx';
 import EntityForm from '../components/EntityForm.jsx';
 import ResourceList from '../components/ResourceList.jsx';
-import { Badge, Modal, Prose } from '../components/ui.jsx';
+import { Badge, ErrorBox, Modal, Prose } from '../components/ui.jsx';
 import { code, fmtDateTime, label, options } from '../constants.js';
-import { useConfirm, useLookup, useToast } from '../context.jsx';
+import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import { bugFields, testCaseFields } from '../forms.js';
 
+const pct = (v) => (v == null ? '—' : `${v}%`);
+
+/** Bảng tổng hợp kết quả test của dự án (test report) */
+function ReportSummary() {
+  const { projectId } = useProject();
+  const { data, error, reload } = useAsync(() => api.testReport({ project_id: projectId }), [projectId]);
+  if (error) return <ErrorBox error={error} onRetry={reload} />;
+  if (!data) return null;
+  const s = data.summary;
+  const seg = (n, tone, text) =>
+    n > 0 && <div className={`seg seg-${tone}`} style={{ flexGrow: n }} title={`${text}: ${n}`} />;
+  return (
+    <section className="card section report">
+      <div className="report-head">
+        <div className="report-kpis">
+          <div>
+            <div className="report-kpi">{pct(s.pass_rate)}</div>
+            <div className="muted small">Tỉ lệ đạt (trên số đã chạy)</div>
+          </div>
+          <div>
+            <div className="report-kpi">{pct(s.progress)}</div>
+            <div className="muted small">
+              Tiến độ thực thi ({s.executed}/{s.total})
+            </div>
+          </div>
+          <div>
+            <div className={`report-kpi ${data.openBugsFromTests ? 'text-danger' : ''}`}>{data.openBugsFromTests}</div>
+            <div className="muted small">Bug mở từ test</div>
+          </div>
+        </div>
+        <div className="muted small">Lần chạy gần nhất: {fmtDateTime(data.lastRun) || '—'}</div>
+      </div>
+      {s.total > 0 && (
+        <>
+          <div className="dist-bar">
+            {seg(s.passed, 'green', 'Đạt')}
+            {seg(s.failed, 'red', 'Không đạt')}
+            {seg(s.blocked, 'amber', 'Bị chặn')}
+            {seg(s.not_run, 'gray', 'Chưa chạy')}
+          </div>
+          <div className="table-wrap">
+            <table className="table compact report-table">
+              <thead>
+                <tr>
+                  <th className="col-stt">STT</th>
+                  <th>Module</th>
+                  <th className="num">Tổng</th>
+                  <th className="num">Đạt</th>
+                  <th className="num">Không đạt</th>
+                  <th className="num">Bị chặn</th>
+                  <th className="num">Chưa chạy</th>
+                  <th className="num">Tỉ lệ đạt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byModule.map((m, i) => (
+                  <tr key={m.module}>
+                    <td className="col-stt">{i + 1}</td>
+                    <td>{m.module}</td>
+                    <td className="num">{m.total}</td>
+                    <td className="num text-success">{m.passed}</td>
+                    <td className={`num ${m.failed ? 'text-danger' : ''}`}>{m.failed}</td>
+                    <td className="num">{m.blocked}</td>
+                    <td className="num muted">{m.not_run}</td>
+                    <td className="num">
+                      <strong>{pct(m.pass_rate)}</strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td />
+                  <td>
+                    <strong>Tổng cộng</strong>
+                  </td>
+                  <td className="num">{s.total}</td>
+                  <td className="num">{s.passed}</td>
+                  <td className="num">{s.failed}</td>
+                  <td className="num">{s.blocked}</td>
+                  <td className="num">{s.not_run}</td>
+                  <td className="num">
+                    <strong>{pct(s.pass_rate)}</strong>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function TestCaseList() {
+  const [version, setVersion] = useState(0);
+  return (
+    <>
+      <ReportSummary key={version} />
+      <h2 className="list-heading">Danh sách test case</h2>
+      <TestCaseTable onChanged={() => setVersion((v) => v + 1)} />
+    </>
+  );
+}
+
+function TestCaseTable({ onChanged }) {
   return (
     <ResourceList
+      onChanged={onChanged}
       resource="test-cases"
       noun="test case"
       formFields={testCaseFields}
@@ -26,9 +132,28 @@ export function TestCaseList() {
         { key: 'title', title: 'Tên test case', sort: 'title', render: (t) => <strong>{t.title}</strong> },
         { key: 'module', title: 'Module', sort: 'module', width: 140 },
         { key: 'type', title: 'Loại', width: 110, render: (t) => label('testType', t.type) },
-        { key: 'priority', title: 'Ưu tiên', sort: 'priority', width: 120, render: (t) => <Badge kind="priority" value={t.priority} /> },
-        { key: 'status', title: 'Kết quả', sort: 'status', width: 120, render: (t) => <Badge kind="testStatus" value={t.status} /> },
-        { key: 'last_run_at', title: 'Chạy lần cuối', sort: 'last_run_at', width: 140, className: 'muted small', render: (t) => fmtDateTime(t.last_run_at) },
+        {
+          key: 'priority',
+          title: 'Ưu tiên',
+          sort: 'priority',
+          width: 120,
+          render: (t) => <Badge kind="priority" value={t.priority} />,
+        },
+        {
+          key: 'status',
+          title: 'Kết quả',
+          sort: 'status',
+          width: 120,
+          render: (t) => <Badge kind="testStatus" value={t.status} />,
+        },
+        {
+          key: 'last_run_at',
+          title: 'Chạy lần cuối',
+          sort: 'last_run_at',
+          width: 140,
+          className: 'muted small',
+          render: (t) => fmtDateTime(t.last_run_at),
+        },
       ]}
     />
   );
@@ -78,12 +203,7 @@ function RunPanel({ tc, reload, onFailed }) {
           onChange={(e) => setNote(e.target.value)}
         />
         <div className="run-actions">
-          <input
-            placeholder="Người thực hiện"
-            list="run-people"
-            value={by}
-            onChange={(e) => setBy(e.target.value)}
-          />
+          <input placeholder="Người thực hiện" list="run-people" value={by} onChange={(e) => setBy(e.target.value)} />
           <datalist id="run-people">
             {lookup.people.map((p) => (
               <option key={p} value={p} />
@@ -122,34 +242,36 @@ function RunHistory({ tc, reload }) {
         <div className="muted">Chưa chạy lần nào</div>
       ) : (
         <div className="table-wrap">
-        <table className="table compact">
-          <thead>
-            <tr>
-              <th style={{ width: 140 }}>Thời điểm</th>
-              <th style={{ width: 110 }}>Kết quả</th>
-              <th style={{ width: 150 }}>Người chạy</th>
-              <th>Ghi chú</th>
-              <th style={{ width: 40 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {tc.runs.map((r) => (
-              <tr key={r.id}>
-                <td className="small">{fmtDateTime(r.executed_at)}</td>
-                <td>
-                  <Badge kind="testStatus" value={r.result} />
-                </td>
-                <td>{r.executed_by}</td>
-                <td className="prose">{r.note}</td>
-                <td>
-                  <button className="icon-btn danger" title="Xoá" onClick={() => remove(r)}>
-                    ×
-                  </button>
-                </td>
+          <table className="table compact">
+            <thead>
+              <tr>
+                <th className="col-stt">STT</th>
+                <th style={{ width: 140 }}>Thời điểm</th>
+                <th style={{ width: 110 }}>Kết quả</th>
+                <th style={{ width: 150 }}>Người chạy</th>
+                <th>Ghi chú</th>
+                <th style={{ width: 40 }} />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tc.runs.map((r, i) => (
+                <tr key={r.id}>
+                  <td className="col-stt">{i + 1}</td>
+                  <td className="small">{fmtDateTime(r.executed_at)}</td>
+                  <td>
+                    <Badge kind="testStatus" value={r.result} />
+                  </td>
+                  <td>{r.executed_by}</td>
+                  <td className="prose">{r.note}</td>
+                  <td>
+                    <button className="icon-btn danger" title="Xoá" onClick={() => remove(r)}>
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </Section>
@@ -168,6 +290,7 @@ export function TestCaseDetail() {
     priority: tc.priority,
     status: 'new',
     reporter: run?.executed_by ?? '',
+    project_id: tc.project_id,
     test_case_id: tc.id,
     task_id: tc.task_id,
     steps_to_reproduce: [tc.preconditions && `Điều kiện: ${tc.preconditions}`, tc.steps].filter(Boolean).join('\n'),
@@ -176,7 +299,7 @@ export function TestCaseDetail() {
   });
 
   const createBug = async (values) => {
-    const bug = await api.create('bugs', values);
+    const bug = await api.create('bugs', { ...values, project_id: bugDraft.project_id });
     toast(`Đã tạo ${code('bugs', bug.id)}`);
     setBugDraft(null);
     refreshLookup();
@@ -186,7 +309,7 @@ export function TestCaseDetail() {
   return (
     <DetailPage
       resource="test-cases"
-      backLabel="Danh sách test case"
+      backLabel="Test report"
       formFields={testCaseFields}
       badges={(tc) => (
         <>

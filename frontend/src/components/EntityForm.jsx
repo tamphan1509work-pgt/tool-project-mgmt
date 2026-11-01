@@ -1,8 +1,49 @@
 import { useId, useState } from 'react';
 import { useLookup } from '../context.jsx';
-import { code } from '../constants.js';
+import { code, label } from '../constants.js';
 
-const REF_RESOURCE = { meetings: 'meetings', tasks: 'tasks', testCases: 'test-cases' };
+const REF_RESOURCE = { meetings: 'meetings', tasks: 'tasks', testCases: 'test-cases', documents: 'documents' };
+
+/** Chọn nhiều bản ghi liên kết (VD tài liệu cho task), nhóm theo loại */
+function MultiRef({ field, value, onChange, lookup, id }) {
+  const items = lookup[field.source] ?? [];
+  const selected = new Set(value ?? []);
+  const toggle = (itemId) => {
+    const next = new Set(selected);
+    if (next.has(itemId)) next.delete(itemId);
+    else next.add(itemId);
+    onChange([...next]);
+  };
+  if (!items.length)
+    return <div className="multiref-empty muted">{field.emptyText ?? 'Chưa có dữ liệu để liên kết'}</div>;
+  const groups = field.groupBy
+    ? Object.entries(
+        items.reduce((acc, it) => {
+          (acc[it[field.groupBy]] ??= []).push(it);
+          return acc;
+        }, {}),
+      )
+    : [['', items]];
+  return (
+    <div className="multiref" id={id} role="group">
+      {groups.map(([group, list]) => (
+        <div key={group} className="multiref-group">
+          {group && <div className="multiref-group-title">{label(field.groupLabel, group)}</div>}
+          {list.map((it) => (
+            <label key={it.id} className="multiref-item">
+              <input type="checkbox" checked={selected.has(it.id)} onChange={() => toggle(it.id)} />
+              <span className="mono muted">{code(REF_RESOURCE[field.source], it.id)}</span>
+              <span>
+                {it.title}
+                {it.version && <span className="muted"> · v{it.version}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function FieldInput({ field, value, onChange, id, lookup }) {
   const common = {
@@ -16,6 +57,10 @@ function FieldInput({ field, value, onChange, id, lookup }) {
   switch (field.type) {
     case 'textarea':
       return <textarea rows={field.rows ?? 4} {...common} />;
+    case 'url':
+      return <input type="url" inputMode="url" {...common} />;
+    case 'multiref':
+      return <MultiRef field={field} value={value} onChange={onChange} lookup={lookup} id={id} />;
     case 'date':
     case 'time':
       return <input type={field.type} {...common} />;
@@ -75,7 +120,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
   const baseId = useId();
   const [values, setValues] = useState(() => {
     const v = {};
-    for (const f of fields) v[f.name] = initial[f.name] ?? f.default ?? '';
+    for (const f of fields) v[f.name] = initial[f.name] ?? f.default ?? (f.type === 'multiref' ? [] : '');
     return v;
   });
   const [errors, setErrors] = useState({});
@@ -90,6 +135,10 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
     const data = {};
     for (const f of fields) {
       const v = values[f.name];
+      if (f.type === 'multiref') {
+        data[f.name] = v ?? [];
+        continue;
+      }
       data[f.name] = v === '' ? null : f.type === 'ref' || f.type === 'number' ? Number(v) : v;
     }
     try {
@@ -107,7 +156,10 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
         {fields.map((f) => {
           const id = `${baseId}-${f.name}`;
           return (
-            <div key={f.name} className={`field ${f.full || f.type === 'textarea' ? 'field-full' : ''}`}>
+            <div
+              key={f.name}
+              className={`field ${f.full || f.type === 'textarea' || f.type === 'multiref' ? 'field-full' : ''}`}
+            >
               <label htmlFor={id}>
                 {f.label}
                 {f.required && <span className="req"> *</span>}

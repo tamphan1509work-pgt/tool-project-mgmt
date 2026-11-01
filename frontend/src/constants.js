@@ -33,6 +33,33 @@ export const LABELS = {
     critical: ['Nghiêm trọng', 'red'],
     blocker: ['Blocker', 'darkred'],
   },
+  projectStatus: {
+    planning: ['Lên kế hoạch', 'blue'],
+    active: ['Đang triển khai', 'green'],
+    on_hold: ['Tạm dừng', 'amber'],
+    completed: ['Hoàn thành', 'gray'],
+    cancelled: ['Đã huỷ', 'red'],
+  },
+  memberRole: {
+    pm: ['Quản lý dự án (PM)', 'purple'],
+    ba: ['Phân tích nghiệp vụ (BA)', 'blue'],
+    tech_lead: ['Trưởng nhóm kỹ thuật', 'purple'],
+    developer: ['Lập trình viên', 'gray'],
+    tester: ['Kiểm thử (QA/Tester)', 'amber'],
+    designer: ['Thiết kế UI/UX', 'green'],
+    devops: ['DevOps', 'gray'],
+    stakeholder: ['Khách hàng / Stakeholder', 'gray'],
+  },
+  documentType: {
+    design: ['Thiết kế', 'purple'],
+    specification: ['Tài liệu đặc tả', 'blue'],
+  },
+  documentStatus: {
+    draft: ['Bản nháp', 'gray'],
+    in_review: ['Đang review', 'amber'],
+    approved: ['Đã duyệt', 'green'],
+    obsolete: ['Hết hiệu lực', 'red'],
+  },
   bugStatus: {
     new: ['Mới', 'blue'],
     in_progress: ['Đang xử lý', 'purple'],
@@ -46,8 +73,9 @@ export const LABELS = {
 export const options = (kind) => Object.entries(LABELS[kind]).map(([value, [label]]) => ({ value, label }));
 export const label = (kind, value) => LABELS[kind]?.[value]?.[0] ?? value ?? '';
 
-export const PREFIX = { meetings: 'MTG', tasks: 'TASK', 'test-cases': 'TC', bugs: 'BUG' };
-export const code = (resource, id) => `${PREFIX[resource]}-${String(id).padStart(3, '0')}`;
+export const PREFIX = { meetings: 'MTG', tasks: 'TASK', 'test-cases': 'TC', bugs: 'BUG', documents: 'DOC', members: 'MEM' };
+export const code = (resource, id) =>
+  resource === 'projects' ? `#${id}` : `${PREFIX[resource]}-${String(id).padStart(3, '0')}`;
 
 /** "2026-01-05" -> "05/01/2026" */
 export function fmtDate(s) {

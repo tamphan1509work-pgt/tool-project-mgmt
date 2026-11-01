@@ -5,7 +5,7 @@ import { openDb } from '../../../backend/src/db.js';
 import { seed } from '../../../backend/src/seed.js';
 import { setInitialData } from './shims/node-sqlite.js';
 
-const STORAGE_KEY = 'project-hub-demo-db-v1';
+const STORAGE_KEY = 'project-hub-demo-db-v2';
 
 const toBase64 = (bytes) => {
   let s = '';

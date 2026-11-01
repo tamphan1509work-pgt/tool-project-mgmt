@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code } from '../constants.js';
-import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
+import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import EntityForm from './EntityForm.jsx';
 import { Empty, ErrorBox, Icon, Loading, Modal, Pagination } from './ui.jsx';
 
@@ -92,24 +92,30 @@ export default function ResourceList({
   defaultValues,
   searchPlaceholder,
   headerExtra,
-  formatCreate,
+  scoped = true, // dữ liệu thuộc dự án hiện tại
+  persistentParams = [], // tham số URL không bị "Xoá bộ lọc" (VD tab loại tài liệu)
+  codeOf = (row) => code(resource, row.id),
+  nameOf = (row) => row.title,
+  onChanged,
 }) {
   const [params, setParam, setParams] = useParamSetter();
   const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
   const { refreshLookup } = useLookup();
-  const [editing, setEditing] = useState(null); // null | 'new' | row
+  const { projectId } = useProject();
+  const [editing, setEditing] = useState(null); // null | 'new' | bản ghi đầy đủ
 
   const page = Math.max(Number(params.get('page')) || 1, 1);
   const query = Object.fromEntries(params);
   delete query.page;
   delete query.view;
+  if (scoped) query.project_id = projectId;
   const key = params.toString();
 
   const { data, loading, error, reload } = useAsync(
     () => api.list(resource, { ...query, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
-    [resource, key],
+    [resource, key, scoped && projectId],
   );
 
   const sort = params.get('sort');
@@ -129,32 +135,47 @@ export default function ResourceList({
     );
   };
 
-  const save = async (values) => {
-    if (editing === 'new') {
-      const created = await api.create(resource, formatCreate ? formatCreate(values) : values);
-      toast(`Đã tạo ${code(resource, created.id)}`);
-    } else {
-      await api.update(resource, editing.id, values);
-      toast(`Đã cập nhật ${code(resource, editing.id)}`);
-    }
-    setEditing(null);
+  const changed = () => {
     reload();
     refreshLookup();
+    onChanged?.();
   };
 
-  const remove = async (row) => {
-    if (!(await confirm(`Xoá ${code(resource, row.id)} "${row.title}"?`))) return;
+  // Lấy bản ghi đầy đủ (kèm liên kết như document_ids) trước khi mở form sửa
+  const startEdit = async (row) => {
     try {
-      await api.remove(resource, row.id);
-      toast(`Đã xoá ${code(resource, row.id)}`);
-      reload();
-      refreshLookup();
+      setEditing(await api.get(resource, row.id));
     } catch (err) {
       toast(err.message, 'error');
     }
   };
 
-  const hasFilter = [...params.keys()].some((k) => !['page', 'sort', 'order', 'view'].includes(k));
+  const save = async (values) => {
+    if (editing === 'new') {
+      const created = await api.create(resource, scoped ? { ...values, project_id: projectId } : values);
+      toast(`Đã tạo ${codeOf(created)}`);
+    } else {
+      const updated = await api.update(resource, editing.id, values);
+      toast(`Đã cập nhật ${codeOf(updated)}`);
+    }
+    setEditing(null);
+    changed();
+  };
+
+  const remove = async (row) => {
+    if (!(await confirm(`Xoá ${codeOf(row)} "${nameOf(row)}"?`))) return;
+    try {
+      await api.remove(resource, row.id);
+      toast(`Đã xoá ${codeOf(row)}`);
+      changed();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  const keep = ['page', 'sort', 'order', 'view', ...persistentParams];
+  const hasFilter = [...params.keys()].some((k) => !keep.includes(k));
+  const offset = data?.offset ?? 0;
 
   return (
     <>
@@ -167,7 +188,8 @@ export default function ResourceList({
             onClick={() =>
               setParams((prev) => {
                 const next = new URLSearchParams();
-                for (const k of ['sort', 'order', 'view']) if (prev.get(k)) next.set(k, prev.get(k));
+                for (const k of ['sort', 'order', 'view', ...persistentParams])
+                  if (prev.get(k)) next.set(k, prev.get(k));
                 return next;
               })
             }
@@ -193,7 +215,8 @@ export default function ResourceList({
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: 90 }}>Mã</th>
+                  <th className="col-stt">STT</th>
+                  <th style={{ width: 96 }}>Mã</th>
                   {columns.map((c) => (
                     <th
                       key={c.key}
@@ -210,11 +233,12 @@ export default function ResourceList({
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((row) => (
+                {data.items.map((row, i) => (
                   <tr key={row.id} onClick={() => navigate(`/${resource}/${row.id}`)} className="clickable">
+                    <td className="col-stt">{offset + i + 1}</td>
                     <td className="mono">
                       <Link to={`/${resource}/${row.id}`} onClick={(e) => e.stopPropagation()}>
-                        {code(resource, row.id)}
+                        {codeOf(row)}
                       </Link>
                     </td>
                     {columns.map((c) => (
@@ -223,7 +247,7 @@ export default function ResourceList({
                       </td>
                     ))}
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="icon-btn" title="Sửa" onClick={() => setEditing(row)}>
+                      <button className="icon-btn" title="Sửa" onClick={() => startEdit(row)}>
                         <Icon name="edit" size={16} />
                       </button>
                       <button className="icon-btn danger" title="Xoá" onClick={() => remove(row)}>
@@ -249,7 +273,7 @@ export default function ResourceList({
       {editing && (
         <Modal
           wide
-          title={editing === 'new' ? `Thêm ${noun}` : `Sửa ${code(resource, editing.id)}`}
+          title={editing === 'new' ? `Thêm ${noun}` : `Sửa ${codeOf(editing)}`}
           onClose={() => setEditing(null)}
         >
           <EntityForm

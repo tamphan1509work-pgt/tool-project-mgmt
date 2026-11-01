@@ -5,7 +5,8 @@ import DetailPage, { InfoList, LinkedList, Section } from '../components/DetailP
 import ResourceList, { Filters, SearchBox, useParamSetter } from '../components/ResourceList.jsx';
 import { Badge, ErrorBox, Icon, Prose } from '../components/ui.jsx';
 import { code, fmtDate, fmtDateTime, isOverdue, LABELS, options } from '../constants.js';
-import { useAsync, useToast } from '../context.jsx';
+import { useAsync, useProject, useToast } from '../context.jsx';
+import { DocLink } from './Documents.jsx';
 import { taskFields } from '../forms.js';
 
 const FILTERS = [
@@ -41,12 +42,20 @@ function Board({ switcher }) {
   const [params, setParam] = useParamSetter();
   const toast = useToast();
   const [dragOver, setDragOver] = useState(null);
+  const { projectId } = useProject();
   const query = Object.fromEntries(params);
   delete query.view;
   delete query.status;
   const { data, error, reload, setData } = useAsync(
-    () => api.list('tasks', { ...query, limit: 500, sort: query.sort || 'priority', order: query.order || 'desc' }),
-    [params.toString()],
+    () =>
+      api.list('tasks', {
+        ...query,
+        project_id: projectId,
+        limit: 500,
+        sort: query.sort || 'priority',
+        order: query.order || 'desc',
+      }),
+    [params.toString(), projectId],
   );
 
   const move = async (taskId, status) => {
@@ -148,8 +157,20 @@ export function TaskList() {
       searchPlaceholder="Tìm theo tên, mô tả, người làm, mã…"
       columns={[
         { key: 'title', title: 'Tên task', sort: 'title', render: (t) => <strong>{t.title}</strong> },
-        { key: 'status', title: 'Trạng thái', sort: 'status', width: 130, render: (t) => <Badge kind="taskStatus" value={t.status} /> },
-        { key: 'priority', title: 'Ưu tiên', sort: 'priority', width: 120, render: (t) => <Badge kind="priority" value={t.priority} /> },
+        {
+          key: 'status',
+          title: 'Trạng thái',
+          sort: 'status',
+          width: 130,
+          render: (t) => <Badge kind="taskStatus" value={t.status} />,
+        },
+        {
+          key: 'priority',
+          title: 'Ưu tiên',
+          sort: 'priority',
+          width: 120,
+          render: (t) => <Badge kind="priority" value={t.priority} />,
+        },
         { key: 'assignee', title: 'Người làm', width: 160 },
         { key: 'due_date', title: 'Hạn', sort: 'due_date', width: 110, render: (t) => <Due task={t} /> },
       ]}
@@ -174,7 +195,9 @@ export function TaskDetail() {
         <select
           value={t.status}
           aria-label="Đổi trạng thái"
-          onChange={(e) => update({ status: e.target.value }, `Đã chuyển sang "${LABELS.taskStatus[e.target.value][0]}"`)}
+          onChange={(e) =>
+            update({ status: e.target.value }, `Đã chuyển sang "${LABELS.taskStatus[e.target.value][0]}"`)
+          }
         >
           {options('taskStatus').map((o) => (
             <option key={o.value} value={o.value}>
@@ -190,9 +213,27 @@ export function TaskDetail() {
             <Section title="Mô tả">
               <Prose text={t.description} placeholder="Chưa có mô tả" />
             </Section>
+            <Section title={`Tài liệu liên quan (${t.documents.length})`}>
+              <LinkedList
+                resource="documents"
+                items={t.documents}
+                render={(d) => (
+                  <>
+                    <Badge kind="documentType" value={d.type} />
+                    {d.version && <span className="muted">v{d.version}</span>}
+                    <DocLink url={d.url} />
+                  </>
+                )}
+                empty="Chưa liên kết tài liệu thiết kế / đặc tả nào. Bấm Sửa để chọn tài liệu."
+              />
+            </Section>
             <Section
               title={`Test case (${t.test_cases.length})`}
-              extra={<Link to={`/test-cases?task_id=${t.id}`} className="small">Xem trong danh sách</Link>}
+              extra={
+                <Link to={`/test-cases?task_id=${t.id}`} className="small">
+                  Xem trong Test report
+                </Link>
+              }
             >
               <LinkedList
                 resource="test-cases"

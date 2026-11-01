@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { code, fmtDateTime } from '../constants.js';
-import { useAsync, useConfirm, useLookup, useToast } from '../context.jsx';
+import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import EntityForm from './EntityForm.jsx';
 import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
 
@@ -10,14 +10,37 @@ import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
  * Khung trang chi tiết: tải bản ghi, header (mã, tiêu đề, sửa, xoá), modal sửa.
  * children: (data, { reload, update }) => JSX
  */
-export default function DetailPage({ resource, backLabel, formFields, actions, badges, children }) {
+export default function DetailPage({
+  resource,
+  backLabel,
+  formFields,
+  actions,
+  badges,
+  children,
+  scoped = true,
+  codeOf = (row) => code(resource, row.id),
+  nameOf = (row) => row.title,
+  onChanged,
+}) {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
   const { refreshLookup } = useLookup();
   const [editing, setEditing] = useState(false);
+  const { projectId, setProjectId } = useProject();
   const { data, loading, error, reload } = useAsync(() => api.get(resource, id), [resource, id]);
+
+  // Mở link của bản ghi thuộc dự án khác -> chuyển dự án hiện tại theo bản ghi
+  // (chỉ một lần cho mỗi bản ghi, để người dùng vẫn đổi được dự án bằng bộ chọn)
+  const switchedFor = useRef(null);
+  useEffect(() => {
+    if (!scoped || !data?.project_id) return;
+    const key = `${resource}:${data.id}`;
+    if (switchedFor.current === key) return;
+    switchedFor.current = key;
+    if (data.project_id !== projectId) setProjectId(data.project_id);
+  }, [scoped, resource, data?.id, data?.project_id, projectId, setProjectId]);
 
   /** Cập nhật nhanh một vài field (VD đổi trạng thái) */
   const update = async (patch, msg = 'Đã cập nhật') => {
@@ -26,25 +49,30 @@ export default function DetailPage({ resource, backLabel, formFields, actions, b
       toast(msg);
       reload();
       refreshLookup();
+      onChanged?.();
     } catch (err) {
       toast(err.message, 'error');
     }
   };
 
   const save = async (values) => {
-    await api.update(resource, id, values);
-    toast(`Đã cập nhật ${code(resource, id)}`);
+    const updated = await api.update(resource, id, values);
+    toast(`Đã cập nhật ${codeOf(updated)}`);
     setEditing(false);
     reload();
     refreshLookup();
+    onChanged?.();
   };
 
   const remove = async () => {
-    if (!(await confirm(`Xoá ${code(resource, id)} "${data.title}"? Thao tác không thể hoàn tác.`))) return;
+    const extra =
+      resource === 'projects' ? ' Toàn bộ biên bản họp, task, test case, bug và tài liệu của dự án cũng bị xoá.' : '';
+    if (!(await confirm(`Xoá ${codeOf(data)} "${nameOf(data)}"?${extra} Thao tác không thể hoàn tác.`))) return;
     try {
       await api.remove(resource, id);
-      toast(`Đã xoá ${code(resource, id)}`);
+      toast(`Đã xoá ${codeOf(data)}`);
       refreshLookup();
+      onChanged?.();
       navigate(`/${resource}`);
     } catch (err) {
       toast(err.message, 'error');
@@ -69,8 +97,8 @@ export default function DetailPage({ resource, backLabel, formFields, actions, b
       </Link>
       <div className="detail-head">
         <div>
-          <div className="detail-code mono">{code(resource, data.id)}</div>
-          <h1>{data.title}</h1>
+          <div className="detail-code mono">{codeOf(data)}</div>
+          <h1>{nameOf(data)}</h1>
           <div className="detail-badges">
             {badges?.(data)}
             <span className="muted small">
@@ -92,7 +120,7 @@ export default function DetailPage({ resource, backLabel, formFields, actions, b
       {children(data, { reload, update })}
 
       {editing && (
-        <Modal wide title={`Sửa ${code(resource, data.id)}`} onClose={() => setEditing(false)}>
+        <Modal wide title={`Sửa ${codeOf(data)}`} onClose={() => setEditing(false)}>
           <EntityForm fields={formFields} initial={data} onSubmit={save} onCancel={() => setEditing(false)} />
         </Modal>
       )}

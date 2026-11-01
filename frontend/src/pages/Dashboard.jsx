@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { Badge, ErrorBox, Loading } from '../components/ui.jsx';
 import { code, fmtDate, LABELS } from '../constants.js';
-import { useAsync } from '../context.jsx';
+import { useAsync, useProject } from '../context.jsx';
 
 function Stat({ to, label, value, sub, tone }) {
   return (
@@ -30,9 +30,18 @@ function Distribution({ title, kind, counts, link }) {
         <div className="muted">Chưa có dữ liệu</div>
       ) : (
         <>
-          <div className="dist-bar" role="img" aria-label={entries.map(([k, n]) => `${LABELS[kind][k][0]}: ${n}`).join(', ')}>
+          <div
+            className="dist-bar"
+            role="img"
+            aria-label={entries.map(([k, n]) => `${LABELS[kind][k][0]}: ${n}`).join(', ')}
+          >
             {entries.map(([k, n]) => (
-              <div key={k} className={`seg seg-${LABELS[kind][k][1]}`} style={{ flexGrow: n }} title={`${LABELS[kind][k][0]}: ${n}`} />
+              <div
+                key={k}
+                className={`seg seg-${LABELS[kind][k][1]}`}
+                style={{ flexGrow: n }}
+                title={`${LABELS[kind][k][0]}: ${n}`}
+              />
             ))}
           </div>
           <ul className="dist-legend">
@@ -65,15 +74,37 @@ function ListCard({ title, items, empty, render, more }) {
 }
 
 export default function Dashboard() {
-  const { data, loading, error, reload } = useAsync(() => api.dashboard(), []);
+  const { projectId } = useProject();
+  const { data, loading, error, reload } = useAsync(() => api.dashboard({ project_id: projectId }), [projectId]);
   if (loading && !data) return <Loading />;
   if (!data) return <ErrorBox error={error} onRetry={reload} />;
   const { counts } = data;
 
+  const p = data.project;
   return (
     <div className="dashboard">
+      <div className="project-banner">
+        <div>
+          <span className="mono muted">{p.code}</span>
+          <h2>{p.name}</h2>
+        </div>
+        <div className="project-banner-meta">
+          <Badge kind="projectStatus" value={p.status} />
+          <span className="muted small">
+            {counts.members} thành viên · {counts.documents} tài liệu
+          </span>
+          <Link to={`/projects/${p.id}`} className="small">
+            Thông tin & thành viên →
+          </Link>
+        </div>
+      </div>
       <div className="stats">
-        <Stat to="/meetings" label="Biên bản họp" value={counts.meetings} sub={`${data.upcomingMeetings.length} cuộc họp sắp tới`} />
+        <Stat
+          to="/meetings"
+          label="Biên bản họp"
+          value={counts.meetings}
+          sub={`${data.upcomingMeetings.length} cuộc họp sắp tới`}
+        />
         <Stat
           to="/tasks"
           label="Task"
@@ -107,7 +138,13 @@ export default function Dashboard() {
           title="Task quá hạn"
           items={data.overdueTasks}
           empty="Không có task quá hạn 🎉"
-          more={counts.overdueTasks > 0 && <Link to="/tasks?overdue=true" className="small">Xem tất cả</Link>}
+          more={
+            counts.overdueTasks > 0 && (
+              <Link to="/tasks?overdue=true" className="small">
+                Xem tất cả
+              </Link>
+            )
+          }
           render={(t) => (
             <li key={t.id}>
               <Link to={`/tasks/${t.id}`}>

@@ -26,19 +26,90 @@ export function useAsync(fn, deps) {
   return { ...state, reload, setData: (data) => setState((s) => ({ ...s, data })) };
 }
 
-/* ---------- Lookup: danh sách dùng cho dropdown liên kết ---------- */
-const EMPTY_LOOKUP = { meetings: [], tasks: [], testCases: [], people: [], modules: [] };
+/* ---------- Dự án hiện tại ---------- */
+const PROJECT_KEY = 'pm.currentProject';
+const readStoredProject = () => {
+  try {
+    return Number(localStorage.getItem(PROJECT_KEY)) || null;
+  } catch {
+    return null;
+  }
+};
+
+const ProjectCtx = createContext({
+  projects: [],
+  projectId: null,
+  project: null,
+  loaded: false,
+  setProjectId: () => {},
+  refreshProjects: () => {},
+});
+
+export function ProjectProvider({ children }) {
+  const [projects, setProjects] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [selected, setSelected] = useState(readStoredProject);
+
+  const refreshProjects = useCallback(() => {
+    api
+      .list('projects', { limit: 500, sort: 'name', order: 'asc' })
+      .then((d) => setProjects(d.items))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+  useEffect(() => {
+    refreshProjects();
+  }, [refreshProjects]);
+
+  const setProjectId = useCallback((id) => {
+    setSelected(id);
+    try {
+      localStorage.setItem(PROJECT_KEY, String(id));
+    } catch {
+      // bỏ qua nếu trình duyệt chặn lưu trữ
+    }
+  }, []);
+
+  // Dự án đã chọn không còn tồn tại -> chọn dự án đang chạy đầu tiên
+  const projectId = projects.some((p) => p.id === selected)
+    ? selected
+    : ((projects.find((p) => p.status === 'active') ?? projects[0])?.id ?? null);
+  const project = projects.find((p) => p.id === projectId) ?? null;
+
+  return (
+    <ProjectCtx.Provider value={{ projects, projectId, project, loaded, setProjectId, refreshProjects }}>
+      {children}
+    </ProjectCtx.Provider>
+  );
+}
+export const useProject = () => useContext(ProjectCtx);
+
+/* ---------- Lookup: danh sách dùng cho dropdown liên kết (theo dự án hiện tại) ---------- */
+const EMPTY_LOOKUP = {
+  projects: [],
+  allMembers: [],
+  members: [],
+  meetings: [],
+  tasks: [],
+  testCases: [],
+  documents: [],
+  people: [],
+  modules: [],
+};
 const LookupCtx = createContext({ lookup: EMPTY_LOOKUP, refreshLookup: () => {} });
 
 export function LookupProvider({ children }) {
+  const { projectId } = useProject();
   const [lookup, setLookup] = useState(EMPTY_LOOKUP);
   const refreshLookup = useCallback(() => {
     api
-      .lookup()
+      .lookup(projectId ? { project_id: projectId } : {})
       .then(setLookup)
       .catch(() => {});
-  }, []);
-  useEffect(refreshLookup, [refreshLookup]);
+  }, [projectId]);
+  useEffect(() => {
+    refreshLookup();
+  }, [refreshLookup]);
   return <LookupCtx.Provider value={{ lookup, refreshLookup }}>{children}</LookupCtx.Provider>;
 }
 export const useLookup = () => useContext(LookupCtx);

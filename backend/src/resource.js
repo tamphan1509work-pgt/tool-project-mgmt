@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { transaction } from './db.js';
 
 export class HttpError extends Error {
   constructor(status, message, details) {
@@ -36,6 +37,7 @@ export function validate(db, fields, body, { partial = false } = {}) {
 
   for (const [name, f] of Object.entries(fields)) {
     if (f.readOnly) continue;
+    if (partial && f.createOnly) continue; // VD project_id: không đổi được sau khi tạo
     if (!(name in body) || body[name] === undefined) {
       if (!partial && f.required) errors[name] = 'Trường này là bắt buộc';
       continue;
@@ -57,6 +59,11 @@ export function validate(db, fields, body, { partial = false } = {}) {
           continue;
         }
         v = String(v);
+        if (f.uppercase) v = v.toUpperCase();
+        if (f.pattern && !f.pattern.test(v)) {
+          errors[name] = f.patternMessage ?? 'Định dạng không hợp lệ';
+          continue;
+        }
         const max = f.max ?? (f.type === 'string' ? 255 : 20000);
         if (v.length > max) {
           errors[name] = `Tối đa ${max} ký tự`;
@@ -82,6 +89,29 @@ export function validate(db, fields, body, { partial = false } = {}) {
           continue;
         }
         break;
+      case 'url':
+        if (typeof v !== 'string' || !/^https?:\/\/\S+$/i.test(v) || v.length > 2000) {
+          errors[name] = 'Link phải bắt đầu bằng http:// hoặc https://';
+          continue;
+        }
+        break;
+      case 'refs': {
+        // Liên kết nhiều-nhiều: mảng ID
+        if (!Array.isArray(v)) {
+          errors[name] = 'Phải là danh sách ID';
+          continue;
+        }
+        const ids = [...new Set(v.map(Number))];
+        const bad = ids.find(
+          (id) => !Number.isInteger(id) || id <= 0 || !db.prepare(`SELECT 1 FROM ${f.table} WHERE id = ?`).get(id),
+        );
+        if (bad !== undefined) {
+          errors[name] = `Không tìm thấy bản ghi liên kết #${bad}`;
+          continue;
+        }
+        v = ids;
+        break;
+      }
       case 'number':
         v = Number(v);
         if (!Number.isFinite(v) || v < 0) {
@@ -129,8 +159,57 @@ export function validate(db, fields, body, { partial = false } = {}) {
 export function createResource(db, cfg) {
   const router = Router();
   const { table } = cfg;
+  const select = `SELECT *${cfg.selectExtra ? `, ${cfg.selectExtra}` : ''} FROM ${table}`;
+  const linkFields = Object.entries(cfg.fields).filter(([, f]) => f.type === 'refs');
 
-  const getRow = (id) => db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  /** Các bản ghi liên kết phải cùng dự án với bản ghi đang lưu */
+  const checkSameProject = (data, existing) => {
+    const projectId = data.project_id ?? existing?.project_id;
+    if (!projectId) return;
+    const errors = {};
+    for (const [name, f] of Object.entries(cfg.fields)) {
+      if (!f.sameProject || data[name] == null) continue;
+      const ids = Array.isArray(data[name]) ? data[name] : [data[name]];
+      for (const id of ids) {
+        const row = db.prepare(`SELECT project_id FROM ${f.table} WHERE id = ?`).get(id);
+        if (row && row.project_id !== projectId) errors[name] = `Bản ghi #${id} thuộc dự án khác`;
+      }
+    }
+    if (Object.keys(errors).length) throw new HttpError(400, 'Dữ liệu không hợp lệ', errors);
+  };
+
+  /** Tách các field nhiều-nhiều ra khỏi dữ liệu cột */
+  const splitLinks = (data) => {
+    const links = {};
+    for (const [name] of linkFields) {
+      if (name in data) {
+        links[name] = data[name] ?? [];
+        delete data[name];
+      }
+    }
+    return links;
+  };
+  const saveLinks = (id, links) => {
+    for (const [name, f] of linkFields) {
+      if (!(name in links)) continue;
+      db.prepare(`DELETE FROM ${f.joinTable} WHERE ${f.ownKey} = ?`).run(id);
+      const ins = db.prepare(`INSERT INTO ${f.joinTable} (${f.ownKey}, ${f.otherKey}) VALUES (?, ?)`);
+      for (const other of links[name]) ins.run(id, other);
+    }
+  };
+
+  /** Lỗi UNIQUE của SQLite -> 400 với thông báo theo field */
+  const writeGuard = (fn) => {
+    try {
+      return fn();
+    } catch (err) {
+      const m = /UNIQUE constraint failed: \w+\.(\w+)/.exec(err.message ?? '');
+      if (m) throw new HttpError(400, 'Dữ liệu không hợp lệ', { [m[1]]: 'Giá trị này đã tồn tại' });
+      throw err;
+    }
+  };
+
+  const getRow = (id) => db.prepare(`${select} WHERE id = ?`).get(id);
   const mustGet = (id) => {
     const row = getRow(id);
     if (!row) throw new HttpError(404, `Không tìm thấy ${cfg.label} #${id}`);
@@ -177,7 +256,7 @@ export function createResource(db, cfg) {
     const { n: total } = db.prepare(`SELECT COUNT(*) AS n FROM ${table} ${whereSql}`).get(...params);
     const items = db
       .prepare(
-        `SELECT * FROM ${table} ${whereSql}
+        `${select} ${whereSql}
          ORDER BY ${cfg.sortable[sortKey]} ${order}, id DESC
          LIMIT ? OFFSET ?`,
       )
@@ -193,12 +272,20 @@ export function createResource(db, cfg) {
   router.post('/', (req, res) => {
     const data = validate(db, cfg.fields, req.body);
     cfg.beforeSave?.(data, null);
+    checkSameProject(data, null);
+    const links = splitLinks(data);
     const cols = Object.keys(data);
     const sql = cols.length
       ? `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`
       : `INSERT INTO ${table} DEFAULT VALUES`;
-    const info = db.prepare(sql).run(...cols.map((c) => data[c]));
-    res.status(201).json(getRow(Number(info.lastInsertRowid)));
+    const id = writeGuard(() =>
+      transaction(db, () => {
+        const newId = Number(db.prepare(sql).run(...cols.map((c) => data[c])).lastInsertRowid);
+        saveLinks(newId, links);
+        return newId;
+      }),
+    );
+    res.status(201).json(getRow(id));
   });
 
   const update = (req, res) => {
@@ -206,12 +293,19 @@ export function createResource(db, cfg) {
     const existing = mustGet(id);
     const data = validate(db, cfg.fields, req.body, { partial: true });
     cfg.beforeSave?.(data, existing);
+    checkSameProject(data, existing);
+    const links = splitLinks(data);
     const cols = Object.keys(data);
-    if (cols.length) {
-      db.prepare(
-        `UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`,
-      ).run(...cols.map((c) => data[c]), id);
-    }
+    writeGuard(() =>
+      transaction(db, () => {
+        if (cols.length || Object.keys(links).length) {
+          db.prepare(
+            `UPDATE ${table} SET ${[...cols.map((c) => `${c} = ?`), "updated_at = datetime('now')"].join(', ')} WHERE id = ?`,
+          ).run(...cols.map((c) => data[c]), id);
+        }
+        saveLinks(id, links);
+      }),
+    );
     res.json(getRow(id));
   };
   router.put('/:id', update);

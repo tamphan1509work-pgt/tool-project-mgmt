@@ -53,6 +53,7 @@ function ActionItems({ meeting, reload }) {
         assignee: form.assignee || null,
         due_date: form.due_date || null,
         meeting_id: meeting.id,
+        project_id: meeting.project_id,
       });
       toast(`Đã tạo ${code('tasks', t.id)}`);
       setForm({ title: '', assignee: '', due_date: '' });
@@ -78,34 +79,45 @@ function ActionItems({ meeting, reload }) {
     <Section title={`Action items (${meeting.action_items.length})`}>
       {meeting.action_items.length > 0 && (
         <div className="table-wrap">
-        <table className="table compact">
-          <tbody>
-            {meeting.action_items.map((t) => (
-              <tr key={t.id}>
-                <td className="mono" style={{ width: 90 }}>
-                  <Link to={`/tasks/${t.id}`}>{code('tasks', t.id)}</Link>
-                </td>
-                <td className={t.status === 'done' ? 'strike' : ''}>{t.title}</td>
-                <td style={{ width: 150 }}>{t.assignee || <span className="muted">Chưa giao</span>}</td>
-                <td style={{ width: 110 }} className={isOverdue(t) ? 'text-danger' : ''}>
-                  {fmtDate(t.due_date)}
-                </td>
-                <td style={{ width: 140 }} className="no-print">
-                  <select value={t.status} onChange={(e) => setStatus(t, e.target.value)} aria-label="Trạng thái">
-                    {options('taskStatus').map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="print-only">
-                  <Badge kind="taskStatus" value={t.status} />
-                </td>
+          <table className="table compact">
+            <thead>
+              <tr>
+                <th className="col-stt">STT</th>
+                <th style={{ width: 90 }}>Mã</th>
+                <th>Nội dung</th>
+                <th style={{ width: 150 }}>Người thực hiện</th>
+                <th style={{ width: 110 }}>Hạn</th>
+                <th style={{ width: 140 }}>Trạng thái</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {meeting.action_items.map((t, i) => (
+                <tr key={t.id}>
+                  <td className="col-stt">{i + 1}</td>
+                  <td className="mono" style={{ width: 90 }}>
+                    <Link to={`/tasks/${t.id}`}>{code('tasks', t.id)}</Link>
+                  </td>
+                  <td className={t.status === 'done' ? 'strike' : ''}>{t.title}</td>
+                  <td style={{ width: 150 }}>{t.assignee || <span className="muted">Chưa giao</span>}</td>
+                  <td style={{ width: 110 }} className={isOverdue(t) ? 'text-danger' : ''}>
+                    {fmtDate(t.due_date)}
+                  </td>
+                  <td style={{ width: 140 }} className="no-print">
+                    <select value={t.status} onChange={(e) => setStatus(t, e.target.value)} aria-label="Trạng thái">
+                      {options('taskStatus').map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="print-only">
+                    <Badge kind="taskStatus" value={t.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       <form className="inline-form no-print" onSubmit={add}>

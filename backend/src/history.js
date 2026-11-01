@@ -17,15 +17,9 @@ const LABEL_COLUMN = {
 const MAX_TEXT = 400;
 const clip = (v) => (typeof v === 'string' && v.length > MAX_TEXT ? `${v.slice(0, MAX_TEXT)}…` : v);
 
-/** Tên người thao tác lấy từ header X-Actor (tên đã encodeURIComponent) */
+/** Tên người thao tác: người dùng đang đăng nhập */
 export function actorOf(req) {
-  const raw = req.headers?.['x-actor'];
-  if (typeof raw !== 'string' || !raw) return null;
-  try {
-    return decodeURIComponent(raw).trim().slice(0, 100) || null;
-  } catch {
-    return null;
-  }
+  return req.user?.name ?? null;
 }
 
 export function refLabel(db, table, id) {

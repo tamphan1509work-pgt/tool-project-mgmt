@@ -6,7 +6,8 @@
 |---|---|
 | **Dự án & thành viên** | Danh sách dự án (mã, tên, trạng thái, thời gian), số task/bug đang mở. Trong từng dự án: thêm thành viên (chọn người có sẵn hoặc tạo mới), gán **vai trò trong dự án** (PM, BA, Tech lead, Developer, Tester, Designer, DevOps, Stakeholder), đổi vai trò, gỡ thành viên. Một người có thể tham gia nhiều dự án với vai trò khác nhau |
 | **Trong chi tiết dự án** | Các tab **Tổng quan** (số liệu, thành viên & vai trò), **Milestone** (mốc dự án: hạn, trạng thái, tiến độ theo task, cảnh báo trễ hạn; trang chi tiết riêng), **Danh mục** (danh mục dạng cây cha / con, màu nhãn; task, test case, bug, tài liệu chọn danh mục; lọc danh mục cha gồm cả danh mục con) và **Lịch sử** (mọi thay đổi trong dự án) |
-| **Lịch sử thay đổi** | Mọi trang chi tiết có mục *Lịch sử thay đổi*: ai, lúc nào, tạo / sửa / xoá, đính kèm file, chạy test, liên kết task, thêm thành viên… Khi sửa, ghi rõ từng trường *giá trị cũ → giá trị mới*. Người thao tác chọn ở ô **"Bạn là…"** trên thanh trên cùng (chưa có đăng nhập) |
+| **Đăng nhập / đăng xuất** | Đăng nhập bằng email của thành viên + mật khẩu (ghi nhớ 30 ngày hoặc 1 ngày). Lần chạy đầu tiên (chưa có tài khoản) hiện màn hình **tạo tài khoản quản trị**. Menu tài khoản: hồ sơ, **đổi mật khẩu**, **đăng xuất**. Quản trị viên tạo tài khoản cho thành viên, đặt lại mật khẩu, cấp / gỡ quyền quản trị, khoá / mở khoá; chỉ quản trị viên được đổi Cài đặt. Đăng nhập sai 5 lần liên tiếp bị khoá 5 phút |
+| **Lịch sử thay đổi** | Mọi trang chi tiết có mục *Lịch sử thay đổi*: ai, lúc nào, tạo / sửa / xoá, đính kèm file, chạy test, liên kết task, thêm thành viên… Khi sửa, ghi rõ từng trường *giá trị cũ → giá trị mới*. Người thao tác là người đang đăng nhập |
 | **Thông báo deadline** | **Cài đặt** bật / tắt: chuông thông báo trên web (task / milestone trễ hoặc sắp đến hạn, xem theo dự án hoặc tất cả) và **email tổng hợp hằng ngày** (giờ gửi, nhắc trước N ngày, người nhận: người thực hiện / PM / email thêm; mỗi mục chỉ nhắc một lần mỗi ngày; xem trước & gửi ngay). Từng thành viên có thể tắt email của mình |
 | **Thành viên** | Danh bạ thành viên dùng chung (họ tên, chức danh, email, điện thoại), số dự án tham gia, số task đang làm / quá hạn. Trang chi tiết: dự án và vai trò, task được giao. **Biểu đồ Gantt**: mỗi thành viên → các dự án đang tham gia (kèm vai trò, thời gian dự án) → các task đang làm (từ ngày bắt đầu tới hạn), có vạch "Hôm nay", lọc theo dự án / thành viên, thu phóng Ngày / Tuần / Tháng, ẩn/hiện task đã xong |
 | **Meeting minutes** | Biên bản họp (agenda, nội dung, quyết định, thành phần), **đính kèm file** ngay khi tạo / sửa biên bản hoặc tại trang chi tiết (kéo thả, tối đa 10 MB/file, xem trước ảnh & file văn bản, tải về), tạo **action item** thành task ngay trong biên bản, in / xuất PDF |
@@ -15,7 +16,7 @@
 | **Bug** | Mức độ, ưu tiên, môi trường, các bước tái hiện…, quy trình *Mới → Đang xử lý → Đã sửa → Đóng / Mở lại*. Khi test **Không đạt** có thể tạo bug ngay với thông tin điền sẵn |
 | **Tài liệu** | Hai loại: **Thiết kế** và **Tài liệu đặc tả**; phiên bản, trạng thái (nháp / đang review / đã duyệt / hết hiệu lực), người soạn, link tài liệu (Drive, Figma, Confluence…), danh sách task đang dùng tài liệu |
 
-Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Dự án đang làm việc được chọn ở thanh bên trái.
+Trang **Tổng quan** hiển thị số liệu của dự án đang chọn. Menu trái **thu gọn / mở rộng** được (nút ☰ hoặc "Thu gọn menu"; chỉ còn icon, có chú thích khi rê chuột) và được ghi nhớ. Dự án đang làm việc được chọn ở thanh bên trái.
 
 Mọi mục (biên bản, task, test case, bug, tài liệu, dự án, thành viên) có nút **Copy link** ở trang chi tiết và trên từng dòng danh sách: người nhận mở link là vào thẳng mục đó (tự chuyển sang đúng dự án). Bản demo dùng link artifact kèm `#tasks-12` (đặt link gốc qua biến `VITE_SHARE_URL` khi build demo).
 
@@ -35,6 +36,10 @@ npm install
 ```bash
 npm run seed            # (tuỳ chọn) tạo dữ liệu mẫu; thêm "-- --reset" để xoá và tạo lại
 ```
+
+Dữ liệu mẫu có sẵn tài khoản, mật khẩu đều là `123456` — **hãy đổi mật khẩu trước khi dùng thật**:
+`an.nguyen@example.com` (quản trị viên), `binh.tran@example.com`, `dung.pham@example.com`, …
+Nếu không chạy seed, lần đầu mở web sẽ có màn hình tạo tài khoản quản trị.
 
 **Chế độ phát triển** (API: http://localhost:3001, Web: http://localhost:5173, tự reload):
 
@@ -103,7 +108,7 @@ frontend/
 
 ## REST API
 
-Tất cả endpoint nằm dưới `/api`. `{resource}` là một trong `projects`, `members`, `categories`, `milestones`, `meetings`, `tasks`, `test-cases`, `bugs`, `documents`.
+Tất cả endpoint nằm dưới `/api` và (trừ `/health`, `/auth/status`, `/auth/setup`, `/auth/login`) yêu cầu header `Authorization: Bearer <token>`. `{resource}` là một trong `projects`, `members`, `categories`, `milestones`, `meetings`, `tasks`, `test-cases`, `bugs`, `documents`.
 
 Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự án: khi tạo phải gửi `project_id` (không đổi được sau đó), khi liệt kê lọc bằng `?project_id=`. Các liên kết (cuộc họp, task, test case, tài liệu) phải cùng dự án.
 
@@ -124,10 +129,14 @@ Dữ liệu meetings / tasks / test-cases / bugs / documents thuộc một dự 
 | POST | `/tasks/:id/links` | Liên kết task `{ other_task_id, type: depends_on \| blocks \| relates }` |
 | DELETE | `/task-links/:id` | Gỡ liên kết |
 | GET | `/{resource}?category_id=` | Lọc task / test case / bug / tài liệu theo danh mục (gồm danh mục con; `none` = chưa phân loại) |
-| GET | `/history?entity=tasks&entity_id=12` hoặc `?project_id=` | Lịch sử thay đổi của một mục / cả dự án. Gửi header `X-Actor` (tên, encodeURIComponent) để ghi người thao tác |
+| GET | `/history?entity=tasks&entity_id=12` hoặc `?project_id=` | Lịch sử thay đổi của một mục / cả dự án. Người thao tác lấy theo tài khoản đăng nhập |
 | GET / PUT | `/settings` | Cài đặt thông báo |
 | GET | `/notifications?project_id=` | Task / milestone trễ hoặc sắp đến hạn (thông báo web) |
 | POST | `/notifications/email/preview` · `/notifications/email/run` | Xem trước / gửi ngay email nhắc deadline |
+| GET | `/auth/status` | `{ needsSetup }`: chưa có tài khoản nào |
+| POST | `/auth/setup` · `/auth/login` | Tạo quản trị viên đầu tiên / đăng nhập `{ email, password, remember }` → `{ token, user }` |
+| GET · POST | `/auth/me` · `/auth/logout` · `/auth/password` | Người dùng hiện tại / đăng xuất / đổi mật khẩu |
+| GET · PUT · DELETE | `/members/:id/account` | Tài khoản đăng nhập của thành viên (PUT/DELETE: quản trị viên) |
 | GET / POST | `/projects/:id/members` | Danh sách / thêm thành viên dự án `{ member_id }` hoặc `{ name, email }` kèm `role` |
 | PATCH / DELETE | `/projects/:id/members/:memberId` | Đổi vai trò `{ role }` / gỡ khỏi dự án |
 | GET | `/gantt?project_id=&member_id=&include_done=true` | Dữ liệu biểu đồ Gantt: thành viên → dự án (vai trò) → task |

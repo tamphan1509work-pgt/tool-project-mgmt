@@ -1,35 +1,135 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { api, getActor, setActor } from '../api.js';
+import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
 import { code, fmtDate } from '../constants.js';
-import { useLookup, useProject } from '../context.jsx';
-import { Icon } from './ui.jsx';
+import { useConfirm, useProject, useToast } from '../context.jsx';
+import { Icon, Modal } from './ui.jsx';
 
-/** Chọn "Bạn là ai" để ghi tên vào lịch sử thay đổi (chưa có đăng nhập) */
-export function ActorSelect() {
-  const { lookup } = useLookup();
-  const [name, setName] = useState(getActor() ?? '');
-  const names = lookup.allMembers.map((m) => m.name);
+function ChangePasswordModal({ onClose }) {
+  const toast = useToast();
+  const [form, setForm] = useState({ current_password: '', new_password: '', confirm: '' });
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (form.new_password !== form.confirm) {
+      setErrors({ confirm: 'Mật khẩu nhập lại không khớp' });
+      return;
+    }
+    setBusy(true);
+    setErrors({});
+    try {
+      await api.changePassword({ current_password: form.current_password, new_password: form.new_password });
+      toast('Đã đổi mật khẩu. Các phiên đăng nhập khác đã được đăng xuất.');
+      onClose();
+    } catch (err) {
+      setErrors(err.details ?? { _: err.message });
+      setBusy(false);
+    }
+  };
+  const field = (name, label, autoComplete) => (
+    <div className="field">
+      <label htmlFor={`pw-${name}`}>{label}</label>
+      <input
+        id={`pw-${name}`}
+        type="password"
+        autoComplete={autoComplete}
+        value={form[name]}
+        onChange={(e) => setForm({ ...form, [name]: e.target.value })}
+        required
+      />
+      {errors[name] && <div className="field-error">{errors[name]}</div>}
+    </div>
+  );
   return (
-    <label className="actor-select" title="Tên này được ghi vào lịch sử thay đổi">
-      <Icon name="people" size={16} />
-      <select
-        aria-label="Bạn là"
-        value={name}
-        onChange={(e) => {
-          setName(e.target.value);
-          setActor(e.target.value);
-        }}
-      >
-        <option value="">Bạn là… (chưa chọn)</option>
-        {name && !names.includes(name) && <option value={name}>{name}</option>}
-        {names.map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Modal title="Đổi mật khẩu" onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <div className="form-grid single">
+          {field('current_password', 'Mật khẩu hiện tại', 'current-password')}
+          {field('new_password', 'Mật khẩu mới (ít nhất 6 ký tự)', 'new-password')}
+          {field('confirm', 'Nhập lại mật khẩu mới', 'new-password')}
+        </div>
+        {errors._ && <div className="error-box">{errors._}</div>}
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={onClose}>
+            Huỷ
+          </button>
+          <button className="btn btn-primary" disabled={busy}>
+            Đổi mật khẩu
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+const initialsOf = (name = '') =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(-2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+
+/** Menu người dùng: thông tin tài khoản, đổi mật khẩu, đăng xuất */
+export function UserMenu() {
+  const { user, logout } = useAuth();
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const ref = useRef(null);
+  const { pathname } = useLocation();
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  if (!user) return null;
+  const signOut = async () => {
+    setOpen(false);
+    if (await confirm('Đăng xuất khỏi Project Hub?', { confirmLabel: 'Đăng xuất' })) await logout();
+  };
+  return (
+    <div className="user-menu" ref={ref}>
+      <button className="user-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Tài khoản">
+        <span className="avatar">{initialsOf(user.name)}</span>
+        <span className="user-name">{user.name}</span>
+      </button>
+      {open && (
+        <div className="user-panel" role="menu">
+          <div className="user-info">
+            <strong>{user.name}</strong>
+            <span className="muted small">{user.email}</span>
+            <span className="small">
+              {user.is_admin ? (
+                <span className="badge badge-purple">Quản trị viên</span>
+              ) : (
+                <span className="badge badge-gray">Thành viên</span>
+              )}
+            </span>
+          </div>
+          <Link to={`/members/${user.id}`} className="user-item" role="menuitem">
+            Hồ sơ của tôi
+          </Link>
+          <button className="user-item" role="menuitem" onClick={() => (setOpen(false), setChanging(true))}>
+            Đổi mật khẩu
+          </button>
+          <button className="user-item danger" role="menuitem" onClick={signOut}>
+            Đăng xuất
+          </button>
+        </div>
+      )}
+      {changing && <ChangePasswordModal onClose={() => setChanging(false)} />}
+    </div>
   );
 }
 

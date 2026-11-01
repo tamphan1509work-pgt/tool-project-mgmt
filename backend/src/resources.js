@@ -509,6 +509,9 @@ export const members = {
     email_notifications: { type: 'boolean', default: 1 },
   },
   selectExtra: `
+    (SELECT COUNT(*) FROM accounts a WHERE a.member_id = members.id) AS has_account,
+    (SELECT a.is_admin FROM accounts a WHERE a.member_id = members.id) AS is_admin,
+    (SELECT a.disabled FROM accounts a WHERE a.member_id = members.id) AS account_disabled,
     (SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count,
     (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done') AS open_task_count,
     (SELECT COUNT(*) FROM tasks t WHERE ${ASSIGNED('t.assignee', 'members.name')} AND t.status <> 'done'
@@ -542,6 +545,24 @@ export const members = {
         )
         .all(row.name),
     };
+  },
+  beforeSave(data, existing, db, req) {
+    // Email dùng để đăng nhập: chỉ quản trị viên hoặc chính chủ được đổi
+    if (existing && data.email !== undefined && data.email !== existing.email && req?.user) {
+      const hasAccount = db.prepare('SELECT 1 FROM accounts WHERE member_id = ?').get(existing.id);
+      if (hasAccount && !req.user.is_admin && req.user.id !== existing.id) {
+        throw new HttpError(403, 'Chỉ quản trị viên hoặc chính thành viên đó được đổi email đăng nhập');
+      }
+    }
+  },
+  beforeDelete(db, row) {
+    const acc = db.prepare('SELECT is_admin, disabled FROM accounts WHERE member_id = ?').get(row.id);
+    const otherAdmins = db
+      .prepare('SELECT COUNT(*) AS n FROM accounts WHERE is_admin = 1 AND disabled = 0 AND member_id <> ?')
+      .get(row.id).n;
+    if (acc?.is_admin && !acc.disabled && otherAdmins === 0) {
+      throw new HttpError(400, 'Không thể xoá quản trị viên cuối cùng của hệ thống');
+    }
   },
   // Đổi tên thành viên -> cập nhật tên ở các nơi đang ghi tên người này
   afterUpdate(db, row, existing) {

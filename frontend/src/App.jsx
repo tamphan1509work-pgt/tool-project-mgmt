@@ -11,7 +11,9 @@ import { MeetingDetail, MeetingList } from './pages/Meetings.jsx';
 import { MemberDetail, MemberList } from './pages/Members.jsx';
 import { MilestoneDetail } from './pages/Milestones.jsx';
 import SettingsPage from './pages/Settings.jsx';
-import { ActorSelect, NotificationBell } from './components/TopbarTools.jsx';
+import { NotificationBell, UserMenu } from './components/TopbarTools.jsx';
+import { AuthProvider, useAuth } from './auth.jsx';
+import LoginPage from './pages/Login.jsx';
 import { ProjectDetail, ProjectList } from './pages/Projects.jsx';
 import { TaskDetail, TaskList } from './pages/Tasks.jsx';
 import { TestCaseDetail, TestCaseList } from './pages/TestCases.jsx';
@@ -43,11 +45,19 @@ const TITLES = {
   documents: 'Quản lý tài liệu',
 };
 
-function ProjectSwitcher() {
-  const { projects, projectId, setProjectId } = useProject();
+function ProjectSwitcher({ collapsed }) {
+  const { projects, projectId, setProjectId, project } = useProject();
   const { pathname } = useLocation();
   const navigate = useNavigate();
   if (!projects.length) return null;
+  if (collapsed) {
+    // Menu thu gọn: chỉ hiện mã dự án đang chọn
+    return (
+      <Link to={`/projects/${projectId}`} className="project-chip" title={`Dự án đang làm việc: ${project?.name}`}>
+        {project?.code}
+      </Link>
+    );
+  }
   const change = (e) => {
     setProjectId(Number(e.target.value));
     // Đang xem chi tiết một bản ghi -> quay về danh sách của dự án mới
@@ -75,8 +85,8 @@ function DocumentsNav() {
   const type = inDocs && pathname === '/documents' ? (params.get('type') ?? '') : null;
   return (
     <>
-      <Link to="/documents" className={`nav-link ${inDocs && !type ? 'active' : ''}`}>
-        <Icon name="doc" /> Tài liệu
+      <Link to="/documents" className={`nav-link ${inDocs && !type ? 'active' : ''}`} title="Tài liệu">
+        <Icon name="doc" /> <span className="nav-label">Tài liệu</span>
       </Link>
       {DOC_NAV.map((d) => (
         <Link
@@ -103,6 +113,14 @@ function RequireProject({ children }) {
       </Empty>
     );
   }
+  return children;
+}
+
+/** Chỉ hiện ứng dụng khi đã đăng nhập; giữ nguyên đường dẫn để sau khi đăng nhập vào đúng trang */
+function AuthGate({ children }) {
+  const { status } = useAuth();
+  if (status === 'loading') return <Loading />;
+  if (status !== 'ok') return <LoginPage />;
   return children;
 }
 
@@ -152,9 +170,29 @@ function DemoBanner({ onReset }) {
   );
 }
 
+const COLLAPSE_KEY = 'pm.sidebarCollapsed';
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 function Layout({ children, onReset }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  // Thu gọn / mở rộng menu trái (máy tính); ghi nhớ trên trình duyệt
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1');
+      } catch {
+        // bỏ qua
+      }
+      return !c;
+    });
   const section = pathname.split('/')[1] ?? '';
   const { project } = useProject();
   const base = TITLES[section] ?? '';
@@ -166,42 +204,60 @@ function Layout({ children, onReset }) {
   }, [title]);
 
   return (
-    <div className={`layout ${open ? 'nav-open' : ''}`}>
+    <div className={`layout ${open ? 'nav-open' : ''} ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar no-print">
-        <Link to="/" className="brand">
-          <span className="brand-logo">✓</span> Project Hub
+        <Link to="/" className="brand" title="Project Hub">
+          <span className="brand-logo">✓</span> <span className="nav-label">Project Hub</span>
         </Link>
         <nav>
-          <NavLink to="/projects" className="nav-link">
-            <Icon name="folder" /> Dự án
+          <NavLink to="/projects" className="nav-link" title="Dự án">
+            <Icon name="folder" /> <span className="nav-label">Dự án</span>
           </NavLink>
-          <NavLink to="/members" className="nav-link">
-            <Icon name="people" /> Thành viên
+          <NavLink to="/members" className="nav-link" title="Thành viên">
+            <Icon name="people" /> <span className="nav-label">Thành viên</span>
           </NavLink>
-          <ProjectSwitcher />
+          <ProjectSwitcher collapsed={collapsed} />
           {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
-              <Icon name={n.icon} /> {n.label}
+            <NavLink key={n.to} to={n.to} end={n.end} className="nav-link" title={n.label}>
+              <Icon name={n.icon} /> <span className="nav-label">{n.label}</span>
             </NavLink>
           ))}
           <DocumentsNav />
           <div className="nav-sep" />
-          <NavLink to="/settings" className="nav-link">
-            <Icon name="gear" /> Cài đặt
+          <NavLink to="/settings" className="nav-link" title="Cài đặt">
+            <Icon name="gear" /> <span className="nav-label">Cài đặt</span>
           </NavLink>
         </nav>
+        <button
+          className="collapse-btn"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+          title={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+          aria-expanded={!collapsed}
+        >
+          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} />
+          <span className="nav-label">Thu gọn menu</span>
+        </button>
       </aside>
       <div className="nav-scrim no-print" onClick={() => setOpen(false)} />
       <div className="main">
         <header className="topbar no-print">
-          <button className="icon-btn menu-btn" onClick={() => setOpen(true)} aria-label="Mở menu">
+          <button
+            className="icon-btn menu-btn"
+            onClick={() =>
+              // điện thoại: mở menu dạng ngăn kéo; máy tính: thu gọn / mở rộng menu
+              window.matchMedia('(max-width: 860px)').matches ? setOpen(true) : toggleCollapsed()
+            }
+            aria-label="Mở / thu gọn menu"
+            title="Mở / thu gọn menu"
+          >
             <Icon name="menu" />
           </button>
           <h1 className="page-title">{title}</h1>
           <div className="topbar-tools">
             {import.meta.env.MODE === 'demo' && <DemoBanner onReset={onReset} />}
-            <ActorSelect />
             <NotificationBell />
+            <UserMenu />
           </div>
           {import.meta.env.MODE === 'demo' && <DemoHashSync />}
         </header>
@@ -222,124 +278,128 @@ export default function App() {
   return (
     <ToastProvider key={generation}>
       <ConfirmProvider>
-        <ProjectProvider>
-          <LookupProvider>
-            <Layout onReset={onReset}>
-              <Routes>
-                <Route path="/projects" element={<ProjectList />} />
-                <Route path="/projects/:id" element={<ProjectDetail />} />
-                <Route path="/members" element={<MemberList />} />
-                <Route path="/members/:id" element={<MemberDetail />} />
-                <Route
-                  path="/categories"
-                  element={
-                    <RequireProject>
-                      <CategoriesRedirect />
-                    </RequireProject>
-                  }
-                />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route
-                  path="/milestones/:id"
-                  element={
-                    <RequireProject>
-                      <MilestoneDetail />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/"
-                  element={
-                    <RequireProject>
-                      <Dashboard />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/meetings"
-                  element={
-                    <RequireProject>
-                      <MeetingList />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/meetings/:id"
-                  element={
-                    <RequireProject>
-                      <MeetingDetail />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/tasks"
-                  element={
-                    <RequireProject>
-                      <TaskList />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/tasks/:id"
-                  element={
-                    <RequireProject>
-                      <TaskDetail />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/test-cases"
-                  element={
-                    <RequireProject>
-                      <TestCaseList />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/test-cases/:id"
-                  element={
-                    <RequireProject>
-                      <TestCaseDetail />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/bugs"
-                  element={
-                    <RequireProject>
-                      <BugList />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/bugs/:id"
-                  element={
-                    <RequireProject>
-                      <BugDetail />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/documents"
-                  element={
-                    <RequireProject>
-                      <DocumentList />
-                    </RequireProject>
-                  }
-                />
-                <Route
-                  path="/documents/:id"
-                  element={
-                    <RequireProject>
-                      <DocumentDetail />
-                    </RequireProject>
-                  }
-                />
-                <Route path="*" element={<Empty>Không tìm thấy trang.</Empty>} />
-              </Routes>
-            </Layout>
-          </LookupProvider>
-        </ProjectProvider>
+        <AuthProvider>
+          <AuthGate>
+            <ProjectProvider>
+              <LookupProvider>
+                <Layout onReset={onReset}>
+                  <Routes>
+                    <Route path="/projects" element={<ProjectList />} />
+                    <Route path="/projects/:id" element={<ProjectDetail />} />
+                    <Route path="/members" element={<MemberList />} />
+                    <Route path="/members/:id" element={<MemberDetail />} />
+                    <Route
+                      path="/categories"
+                      element={
+                        <RequireProject>
+                          <CategoriesRedirect />
+                        </RequireProject>
+                      }
+                    />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route
+                      path="/milestones/:id"
+                      element={
+                        <RequireProject>
+                          <MilestoneDetail />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/"
+                      element={
+                        <RequireProject>
+                          <Dashboard />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/meetings"
+                      element={
+                        <RequireProject>
+                          <MeetingList />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/meetings/:id"
+                      element={
+                        <RequireProject>
+                          <MeetingDetail />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/tasks"
+                      element={
+                        <RequireProject>
+                          <TaskList />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/tasks/:id"
+                      element={
+                        <RequireProject>
+                          <TaskDetail />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/test-cases"
+                      element={
+                        <RequireProject>
+                          <TestCaseList />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/test-cases/:id"
+                      element={
+                        <RequireProject>
+                          <TestCaseDetail />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/bugs"
+                      element={
+                        <RequireProject>
+                          <BugList />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/bugs/:id"
+                      element={
+                        <RequireProject>
+                          <BugDetail />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/documents"
+                      element={
+                        <RequireProject>
+                          <DocumentList />
+                        </RequireProject>
+                      }
+                    />
+                    <Route
+                      path="/documents/:id"
+                      element={
+                        <RequireProject>
+                          <DocumentDetail />
+                        </RequireProject>
+                      }
+                    />
+                    <Route path="*" element={<Empty>Không tìm thấy trang.</Empty>} />
+                  </Routes>
+                </Layout>
+              </LookupProvider>
+            </ProjectProvider>
+          </AuthGate>
+        </AuthProvider>
       </ConfirmProvider>
     </ToastProvider>
   );

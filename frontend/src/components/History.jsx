@@ -64,6 +64,7 @@ const ACTION_LABELS = {
   run: 'đã thực thi test',
   'delete-run': 'đã xoá lần chạy test',
   member: 'đã thay đổi thành viên',
+  account: 'đã thay đổi tài khoản đăng nhập',
 };
 
 function useFormatter() {

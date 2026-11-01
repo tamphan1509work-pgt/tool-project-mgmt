@@ -13,11 +13,13 @@ let base;
 let db;
 let P; // dự án dùng chung cho các test
 let P2; // dự án thứ hai
+let TOKEN; // phiên đăng nhập của quản trị viên dùng cho các test
+const auth = () => ({ Authorization: `Bearer ${TOKEN}` });
 
-const req = async (method, path, body) => {
+const req = async (method, path, body, token = TOKEN) => {
   const res = await fetch(base + path, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -29,6 +31,8 @@ before(async () => {
   server = createApp(db).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}/api`;
+  const setup = await req('POST', '/auth/setup', { name: 'Admin Test', email: 'Admin@Test.vn', password: 'secret123' }, null);
+  TOKEN = setup.body.token;
   P = (await req('POST', '/projects', { code: 'test', name: 'Dự án test' })).body.id;
   P2 = (await req('POST', '/projects', { code: 'OTHER', name: 'Dự án khác' })).body.id;
 });
@@ -277,6 +281,9 @@ describe('bugs', () => {
 describe('misc', () => {
   test('dashboard, lookup theo dự án, seed', async () => {
     seed(db, { reset: true });
+    // dữ liệu mẫu thay toàn bộ tài khoản -> đăng nhập lại bằng tài khoản mẫu
+    TOKEN = (await req('POST', '/auth/login', { email: 'an.nguyen@example.com', password: '123456' }, null)).body.token;
+    assert.ok(TOKEN);
     const projects = (await req('GET', '/projects?sort=code&order=desc')).body.items;
     const pay = projects.find((p) => p.code === 'PAY');
     assert.ok(pay.member_count >= 5);
@@ -300,7 +307,7 @@ describe('misc', () => {
   test('lỗi JSON và route không tồn tại', async () => {
     const res = await fetch(base + '/tasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...auth() },
       body: '{bad',
     });
     assert.equal(res.status, 400);
@@ -399,12 +406,12 @@ describe('meeting attachments', () => {
     assert.equal(r.body.size, Buffer.byteLength(content));
     const fileId = r.body.id;
 
-    const dl = await fetch(`${base}/attachments/${fileId}/download`);
+    const dl = await fetch(`${base}/attachments/${fileId}/download`, { headers: auth() });
     assert.equal(dl.status, 200);
     assert.equal(await dl.text(), content);
     assert.match(dl.headers.get('content-disposition'), /^attachment;.*filename\*=UTF-8''/);
     // file không phải ảnh thì không hiển thị inline
-    const inl = await fetch(`${base}/attachments/${fileId}/download?inline=1`);
+    const inl = await fetch(`${base}/attachments/${fileId}/download?inline=1`, { headers: auth() });
     assert.match(inl.headers.get('content-disposition'), /^attachment/);
 
     r = await req('GET', `/meetings/${m.id}`);
@@ -419,7 +426,7 @@ describe('meeting attachments', () => {
 
     await req('POST', `/meetings/${m.id}/attachments`, { name: 'b.png', mime_type: 'image/png', data: 'iVBORw0KGgo=' });
     await req('DELETE', `/attachments/${fileId}`);
-    assert.equal((await fetch(`${base}/attachments/${fileId}/download`)).status, 404);
+    assert.equal((await fetch(`${base}/attachments/${fileId}/download`, { headers: auth() })).status, 404);
     await req('DELETE', `/meetings/${m.id}`);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE meeting_id = ?').get(m.id).n, 0);
   });
@@ -431,7 +438,7 @@ describe('meeting attachments', () => {
       const m = (await req('POST', '/meetings', { project_id: P, title: 'Giới hạn', meeting_date: '2026-02-01' })).body;
       const res = await fetch(`http://127.0.0.1:${small.address().port}/api/meetings/${m.id}/attachments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth() },
         body: JSON.stringify({ name: 'big.bin', data: Buffer.alloc(11).toString('base64') }),
       });
       assert.equal(res.status, 400);
@@ -531,7 +538,7 @@ describe('test run attachments', () => {
     assert.equal(r.body.test_run_id, run.id);
     assert.equal(r.body.meeting_id, null);
     const fileId = r.body.id;
-    const inl = await fetch(`${base}/attachments/${fileId}/download?inline=1`);
+    const inl = await fetch(`${base}/attachments/${fileId}/download?inline=1`, { headers: auth() });
     assert.match(inl.headers.get('content-disposition'), /^inline/);
 
     r = await req('GET', `/test-cases/${tc.id}`);
@@ -540,7 +547,7 @@ describe('test run attachments', () => {
     assert.equal((await req('POST', '/test-runs/99999/attachments', { name: 'a', data: 'YQ==' })).status, 404);
 
     await req('DELETE', `/test-runs/${run.id}`);
-    assert.equal((await fetch(`${base}/attachments/${fileId}/download`)).status, 404);
+    assert.equal((await fetch(`${base}/attachments/${fileId}/download`, { headers: auth() })).status, 404);
   });
 
   test('migration: file biên bản họp ở bảng cũ được chuyển sang bảng chung', () => {
@@ -627,7 +634,7 @@ describe('categories', () => {
 
 describe('history', () => {
   test('ghi lại tạo / sửa (kèm giá trị cũ-mới) / liên kết / chạy test / xoá, có người thực hiện', async () => {
-    const headers = { 'Content-Type': 'application/json', 'X-Actor': encodeURIComponent('Trần Thị Bình') };
+    const headers = { 'Content-Type': 'application/json', ...auth() };
     const call = async (method, path, body) => {
       const res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
       return { status: res.status, body: res.status === 204 ? null : await res.json() };
@@ -642,7 +649,8 @@ describe('history', () => {
 
     let r = await req('GET', `/history?entity=tasks&entity_id=${t.id}`);
     assert.deepEqual(r.body.items.map((h) => h.action), ['link', 'update', 'create']);
-    assert.ok(r.body.items.every((h) => h.actor === 'Trần Thị Bình'));
+    const me = (await req('GET', '/auth/me')).body.name;
+    assert.ok(r.body.items.every((h) => h.actor === me));
     const upd = r.body.items[1].changes;
     assert.deepEqual(upd.find((c) => c.field === 'priority'), { field: 'priority', from: 'low', to: 'high' });
     assert.equal(upd.find((c) => c.field === 'title').to, 'Hist task 2');
@@ -758,5 +766,81 @@ describe('settings & deadline notifications', () => {
     assert.equal((await req('POST', '/notifications/email/run', {})).status, 400);
     r = await req('POST', '/notifications/email/preview', {});
     assert.ok(r.body.digests.some((x) => x.to === 'dev@ntf.vn'));
+  });
+});
+
+describe('auth', () => {
+  test('bắt buộc đăng nhập; đăng nhập / đăng xuất; setup chỉ một lần', async () => {
+    assert.equal((await req('GET', '/tasks', undefined, null)).status, 401);
+    assert.equal((await req('GET', '/tasks', undefined, 'f'.repeat(64))).status, 401);
+    assert.equal((await req('GET', '/health', undefined, null)).status, 200);
+    assert.deepEqual((await req('GET', '/auth/status', undefined, null)).body, { needsSetup: false });
+    assert.equal((await req('POST', '/auth/setup', { name: 'X', email: 'x@x.vn', password: '123456' }, null)).status, 403);
+
+    let r = await req('POST', '/auth/login', { email: 'an.nguyen@example.com', password: 'sai' }, null);
+    assert.equal(r.status, 401);
+    r = await req('POST', '/auth/login', { email: ' AN.NGUYEN@example.com ', password: '123456', remember: true }, null);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.user.name, 'Nguyễn Văn An');
+    assert.equal(r.body.user.is_admin, true);
+    assert.equal(r.body.user.tokenHash, undefined, 'không lộ hash');
+    const t = r.body.token;
+    assert.equal((await req('GET', '/auth/me', undefined, t)).body.email, 'an.nguyen@example.com');
+    assert.equal((await req('POST', '/auth/logout', {}, t)).status, 204);
+    assert.equal((await req('GET', '/auth/me', undefined, t)).status, 401, 'token hết hiệu lực sau khi đăng xuất');
+    // DB chỉ lưu hash của token
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE token_hash = ?').get(t).n, 0);
+  });
+
+  test('khoá tạm sau 5 lần sai; đổi mật khẩu; quyền quản trị', async () => {
+    for (let i = 0; i < 5; i++) await req('POST', '/auth/login', { email: 'dung.pham@example.com', password: 'sai' }, null);
+    let r = await req('POST', '/auth/login', { email: 'dung.pham@example.com', password: '123456' }, null);
+    assert.equal(r.status, 429);
+
+    r = await req('POST', '/auth/login', { email: 'lan.vu@example.com', password: '123456' }, null);
+    const lan = r.body;
+    assert.equal(lan.user.is_admin, false);
+    const other = (await req('POST', '/auth/login', { email: 'lan.vu@example.com', password: '123456' }, null)).body.token;
+    r = await req('POST', '/auth/password', { current_password: 'sai', new_password: 'newpass1' }, lan.token);
+    assert.equal(r.status, 400);
+    r = await req('POST', '/auth/password', { current_password: '123456', new_password: '123' }, lan.token);
+    assert.ok(r.body.details.new_password);
+    assert.equal((await req('POST', '/auth/password', { current_password: '123456', new_password: 'newpass1' }, lan.token)).status, 204);
+    assert.equal((await req('GET', '/auth/me', undefined, other)).status, 401, 'phiên khác bị đăng xuất');
+    assert.equal((await req('GET', '/auth/me', undefined, lan.token)).status, 200, 'phiên hiện tại giữ nguyên');
+    assert.equal((await req('POST', '/auth/login', { email: 'lan.vu@example.com', password: 'newpass1' }, null)).status, 200);
+
+    // người không phải quản trị
+    const members = (await req('GET', '/members?limit=50')).body.items;
+    const an = members.find((m) => m.email === 'an.nguyen@example.com');
+    const huy = members.find((m) => m.email === 'huy.hoang@example.com');
+    assert.equal(an.has_account, 1);
+    assert.equal(an.is_admin, 1);
+    assert.equal((await req('PUT', `/members/${huy.id}/account`, { disabled: true }, lan.token)).status, 403);
+    assert.equal((await req('PUT', '/settings', { web_enabled: true }, lan.token)).status, 403);
+    assert.equal((await req('PATCH', `/members/${an.id}`, { email: 'hack@x.vn' }, lan.token)).status, 403);
+    assert.equal((await req('PATCH', `/members/${huy.id}`, { position: 'Dev' }, lan.token)).status, 200);
+
+    // quản trị viên: khoá, mở khoá, cấp quyền, đặt mật khẩu, tạo tài khoản mới
+    assert.equal((await req('PUT', `/members/${huy.id}/account`, { disabled: true })).status, 200);
+    assert.equal((await req('POST', '/auth/login', { email: 'huy.hoang@example.com', password: '123456' }, null)).status, 403);
+    r = await req('PUT', `/members/${huy.id}/account`, { disabled: false, is_admin: true, password: 'huy12345' });
+    assert.equal(r.body.is_admin, 1);
+    assert.equal((await req('POST', '/auth/login', { email: 'huy.hoang@example.com', password: 'huy12345' }, null)).status, 200);
+    const noMail = (await req('POST', '/members', { name: 'Không email' })).body;
+    assert.equal((await req('PUT', `/members/${noMail.id}/account`, { password: '123456' })).status, 400);
+    const fresh = (await req('POST', '/members', { name: 'Mới', email: 'moi@x.vn' })).body;
+    assert.equal((await req('PUT', `/members/${fresh.id}/account`, {})).status, 400, 'tài khoản mới cần mật khẩu');
+    assert.equal((await req('PUT', `/members/${fresh.id}/account`, { password: 'moi12345' })).status, 200);
+    assert.equal((await req('POST', '/auth/login', { email: 'moi@x.vn', password: 'moi12345' }, null)).status, 200);
+    assert.equal((await req('DELETE', `/members/${fresh.id}/account`)).status, 204);
+    assert.equal((await req('POST', '/auth/login', { email: 'moi@x.vn', password: 'moi12345' }, null)).status, 401);
+
+    // không tự gỡ quyền / tự khoá; không xoá quản trị viên cuối cùng
+    assert.equal((await req('PUT', `/members/${an.id}/account`, { is_admin: false })).status, 400);
+    await req('PUT', `/members/${huy.id}/account`, { is_admin: false });
+    assert.equal((await req('DELETE', `/members/${an.id}`)).status, 400);
+    r = await req('GET', `/history?entity=members&entity_id=${huy.id}`);
+    assert.ok(r.body.items.some((h) => /Khoá tài khoản/.test(h.summary ?? '')));
   });
 });

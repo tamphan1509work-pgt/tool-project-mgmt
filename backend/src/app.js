@@ -21,6 +21,17 @@ import {
   testRuns,
 } from './resources.js';
 
+import {
+  assertNotLocked,
+  bearer,
+  checkPasswordRule,
+  clearFailures,
+  createSession,
+  hashPassword,
+  recordFailure,
+  userFromToken,
+  verifyPassword,
+} from './auth.js';
 import { actorOf, listHistory, recordHistory, refLabel } from './history.js';
 import { deadlineItems, buildEmailDigests, getSettings, runEmailNotifications, saveSettings } from './notify.js';
 
@@ -83,6 +94,163 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   const api = express.Router();
 
   api.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // ================= Đăng nhập / đăng xuất =================
+  // Thông tin người dùng gửi về trình duyệt (bỏ hash của token phiên)
+  const publicUser = ({ tokenHash, ...user }) => (void tokenHash, user);
+  const hasAnyAccount = () => Boolean(db.prepare('SELECT 1 FROM accounts LIMIT 1').get());
+  const normEmail = (v) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+
+  // Chưa có tài khoản nào -> cần tạo tài khoản quản trị đầu tiên
+  api.get('/auth/status', (_req, res) => res.json({ needsSetup: !hasAnyAccount() }));
+
+  api.post('/auth/setup', async (req, res) => {
+    if (hasAnyAccount()) throw new HttpError(403, 'Hệ thống đã có tài khoản. Hãy đăng nhập.');
+    const data = validate(
+      db,
+      { name: { type: 'string', required: true }, email: { ...members.fields.email, required: true } },
+      req.body,
+    );
+    checkPasswordRule(req.body?.password);
+    const email = normEmail(data.email);
+    const hash = await hashPassword(req.body.password);
+    const memberId = transaction(db, () => {
+      const existing = db.prepare('SELECT id FROM members WHERE lower(email) = ?').get(email);
+      const id =
+        existing?.id ??
+        Number(db.prepare('INSERT INTO members (name, email) VALUES (?, ?)').run(data.name, email).lastInsertRowid);
+      db.prepare('INSERT INTO accounts (member_id, password_hash, is_admin) VALUES (?, ?, 1)').run(id, hash);
+      return id;
+    });
+    const session = await createSession(db, memberId, { remember: true });
+    res.status(201).json({ ...session, user: publicUser(await userFromToken(db, session.token)) });
+  });
+
+  api.post('/auth/login', async (req, res) => {
+    const email = normEmail(req.body?.email);
+    const password = req.body?.password;
+    if (!email || typeof password !== 'string' || !password) {
+      throw new HttpError(400, 'Nhập email và mật khẩu');
+    }
+    assertNotLocked(email);
+    const acc = db
+      .prepare(
+        `SELECT a.member_id, a.password_hash, a.disabled FROM accounts a JOIN members m ON m.id = a.member_id
+         WHERE lower(m.email) = ?`,
+      )
+      .get(email);
+    // Luôn chạy băm mật khẩu để không lộ email nào có tài khoản qua thời gian phản hồi
+    const ok = await verifyPassword(password, acc?.password_hash ?? 'pbkdf2$210000$00$00');
+    if (!acc || !ok) {
+      recordFailure(email);
+      throw new HttpError(401, 'Email hoặc mật khẩu không đúng');
+    }
+    if (acc.disabled) throw new HttpError(403, 'Tài khoản đã bị khoá. Liên hệ quản trị viên.');
+    clearFailures(email);
+    const session = await createSession(db, acc.member_id, { remember: req.body?.remember === true });
+    res.json({ ...session, user: publicUser(await userFromToken(db, session.token)) });
+  });
+
+  // Mọi API bên dưới yêu cầu đăng nhập
+  api.use(async (req, _res, next) => {
+    const user = await userFromToken(db, bearer(req));
+    if (!user) throw new HttpError(401, 'Bạn cần đăng nhập');
+    req.user = user;
+    next();
+  });
+  const requireAdmin = (req) => {
+    if (!req.user?.is_admin) throw new HttpError(403, 'Chỉ quản trị viên mới thực hiện được thao tác này');
+  };
+
+  api.get('/auth/me', (req, res) => res.json(publicUser(req.user)));
+
+  api.post('/auth/logout', (req, res) => {
+    db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(req.user.tokenHash);
+    res.status(204).end();
+  });
+
+  // Đổi mật khẩu của chính mình (đăng xuất các phiên khác)
+  api.post('/auth/password', async (req, res) => {
+    const acc = db.prepare('SELECT password_hash FROM accounts WHERE member_id = ?').get(req.user.id);
+    if (!(await verifyPassword(String(req.body?.current_password ?? ''), acc.password_hash))) {
+      throw new HttpError(400, 'Dữ liệu không hợp lệ', { current_password: 'Mật khẩu hiện tại không đúng' });
+    }
+    checkPasswordRule(req.body?.new_password, 'new_password');
+    db.prepare('UPDATE accounts SET password_hash = ? WHERE member_id = ?').run(
+      await hashPassword(req.body.new_password),
+      req.user.id,
+    );
+    db.prepare('DELETE FROM sessions WHERE member_id = ? AND token_hash <> ?').run(req.user.id, req.user.tokenHash);
+    recordHistory(db, { entity: 'members', entityId: req.user.id, action: 'account', summary: 'Đổi mật khẩu', actor: req.user.name });
+    res.status(204).end();
+  });
+
+  // Quản trị viên: tạo / cập nhật tài khoản đăng nhập của một thành viên
+  api.put('/members/:id/account', async (req, res) => {
+    requireAdmin(req);
+    const memberId = parseId(req.params.id);
+    const member = db.prepare('SELECT id, name, email FROM members WHERE id = ?').get(memberId);
+    if (!member) throw new HttpError(404, `Không tìm thấy thành viên #${memberId}`);
+    const acc = db.prepare('SELECT * FROM accounts WHERE member_id = ?').get(memberId);
+    const body = req.body ?? {};
+    if (!acc) {
+      if (!member.email) {
+        throw new HttpError(400, 'Thành viên chưa có email. Hãy thêm email (dùng để đăng nhập) trước.');
+      }
+      checkPasswordRule(body.password);
+    } else if (body.password !== undefined) checkPasswordRule(body.password);
+    const isAdmin = body.is_admin === undefined ? (acc?.is_admin ?? 0) : body.is_admin ? 1 : 0;
+    const disabled = body.disabled === undefined ? (acc?.disabled ?? 0) : body.disabled ? 1 : 0;
+    // Không được tự gỡ quyền quản trị / tự khoá mình, và luôn còn ít nhất một quản trị viên hoạt động
+    if (memberId === req.user.id && (!isAdmin || disabled)) {
+      throw new HttpError(400, 'Không thể tự gỡ quyền quản trị hoặc tự khoá tài khoản của chính mình');
+    }
+    const hash = body.password !== undefined ? await hashPassword(body.password) : acc.password_hash;
+    const changes = [];
+    transaction(db, () => {
+      if (acc) {
+        db.prepare('UPDATE accounts SET password_hash = ?, is_admin = ?, disabled = ? WHERE member_id = ?').run(
+          hash,
+          isAdmin,
+          disabled,
+          memberId,
+        );
+      } else {
+        db.prepare('INSERT INTO accounts (member_id, password_hash, is_admin, disabled) VALUES (?, ?, ?, ?)').run(
+          memberId,
+          hash,
+          isAdmin,
+          disabled,
+        );
+      }
+      if (body.password !== undefined || disabled) db.prepare('DELETE FROM sessions WHERE member_id = ?').run(memberId);
+      if (!acc) changes.push('Tạo tài khoản đăng nhập');
+      if (body.password !== undefined && acc) changes.push('Đặt lại mật khẩu');
+      if (acc && isAdmin !== acc.is_admin) changes.push(isAdmin ? 'Cấp quyền quản trị' : 'Gỡ quyền quản trị');
+      if (acc && disabled !== acc.disabled) changes.push(disabled ? 'Khoá tài khoản' : 'Mở khoá tài khoản');
+      if (changes.length) {
+        recordHistory(db, { entity: 'members', entityId: memberId, action: 'account', summary: changes.join(', '), actor: req.user.name });
+      }
+    });
+    res.json(accountOf(memberId));
+  });
+
+  api.delete('/members/:id/account', (req, res) => {
+    requireAdmin(req);
+    const memberId = parseId(req.params.id);
+    if (memberId === req.user.id) throw new HttpError(400, 'Không thể xoá tài khoản đăng nhập của chính mình');
+    const info = db.prepare('DELETE FROM accounts WHERE member_id = ?').run(memberId);
+    if (!info.changes) throw new HttpError(404, 'Thành viên này chưa có tài khoản');
+    db.prepare('DELETE FROM sessions WHERE member_id = ?').run(memberId);
+    recordHistory(db, { entity: 'members', entityId: memberId, action: 'account', summary: 'Xoá tài khoản đăng nhập', actor: req.user.name });
+    res.status(204).end();
+  });
+
+  const accountOf = (memberId) =>
+    db
+      .prepare('SELECT member_id, is_admin, disabled, last_login_at, created_at FROM accounts WHERE member_id = ?')
+      .get(memberId) ?? null;
+  api.get('/members/:id/account', (req, res) => res.json(accountOf(parseId(req.params.id))));
   api.get('/enums', (_req, res) => res.json(ENUMS));
   api.get('/config', (_req, res) => res.json({ maxUploadBytes }));
 
@@ -528,6 +696,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
   const emailStatus = () => ({ configured: Boolean(mailer), from: mailer?.from ?? null });
   api.get('/settings', (_req, res) => res.json({ settings: getSettings(db), email: emailStatus() }));
   api.put('/settings', (req, res) => {
+    requireAdmin(req);
     const [settings, changes] = saveSettings(db, req.body);
     if (changes.length) {
       recordHistory(db, { entity: 'settings', entityId: 0, action: 'update', changes, actor: actorOf(req) });
@@ -555,6 +724,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, 
 
   // Gửi email nhắc deadline ngay
   api.post('/notifications/email/run', async (req, res) => {
+    requireAdmin(req);
     if (!mailer) {
       throw new HttpError(400, 'Chưa cấu hình máy chủ gửi email (SMTP). Xem hướng dẫn trong README.');
     }

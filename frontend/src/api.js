@@ -12,24 +12,31 @@ const doFetch = demo ? demo.demoFetch : (...args) => fetch(...args);
 /** Chỉ có ở bản demo: khôi phục dữ liệu mẫu */
 export const resetDemo = demo?.resetDemo;
 
-/* ---------- Người đang thao tác (ghi vào lịch sử thay đổi) ---------- */
-const ACTOR_KEY = 'pm.actor';
-let actor = null;
+/* ---------- Phiên đăng nhập ---------- */
+const TOKEN_KEY = 'pm.token';
+let token = null;
 try {
-  actor = localStorage.getItem(ACTOR_KEY) || null;
+  token = localStorage.getItem(TOKEN_KEY) || null;
 } catch {
-  actor = null;
+  token = null;
 }
-export const getActor = () => actor;
-export function setActor(name) {
-  actor = name || null;
+export const getToken = () => token;
+export function setToken(value) {
+  token = value || null;
   try {
-    if (actor) localStorage.setItem(ACTOR_KEY, actor);
-    else localStorage.removeItem(ACTOR_KEY);
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    // trình duyệt chặn lưu trữ: chỉ giữ trong phiên
+    // trình duyệt chặn lưu trữ: chỉ giữ đăng nhập trong phiên này
   }
 }
+const authHeader = () => (token ? { Authorization: `Bearer ${token}` } : {});
+// Phiên hết hạn / bị thu hồi -> báo cho AuthProvider để quay về màn hình đăng nhập
+const onUnauthorized = (path) => {
+  if (!path.startsWith('/auth/login') && !path.startsWith('/auth/setup')) {
+    window.dispatchEvent(new Event('pm:unauthorized'));
+  }
+};
 
 async function request(method, path, body) {
   let res;
@@ -38,13 +45,14 @@ async function request(method, path, body) {
       method,
       headers: {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...(actor ? { 'X-Actor': encodeURIComponent(actor) } : {}),
+        ...authHeader(),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
     throw new ApiError(0, 'Không kết nối được tới máy chủ');
   }
+  if (res.status === 401) onUnauthorized(path);
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, data?.error || `Lỗi ${res.status}`, data?.details);
@@ -55,11 +63,12 @@ async function request(method, path, body) {
 async function requestBlob(path) {
   let res;
   try {
-    res = await doFetch(`/api${path}`, { method: 'GET' });
+    res = await doFetch(`/api${path}`, { method: 'GET', headers: authHeader() });
   } catch {
     throw new ApiError(0, 'Không kết nối được tới máy chủ');
   }
   if (!res.ok) {
+    if (res.status === 401) onUnauthorized(path);
     const data = await res.json().catch(() => null);
     throw new ApiError(res.status, data?.error || `Lỗi ${res.status}`);
   }
@@ -85,6 +94,15 @@ export const api = {
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
   dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
   config: () => request('GET', '/config'),
+  authStatus: () => request('GET', '/auth/status'),
+  setup: (data) => request('POST', '/auth/setup', data),
+  login: (data) => request('POST', '/auth/login', data),
+  logout: () => request('POST', '/auth/logout', {}),
+  me: () => request('GET', '/auth/me'),
+  changePassword: (data) => request('POST', '/auth/password', data),
+  account: (memberId) => request('GET', `/members/${memberId}/account`),
+  saveAccount: (memberId, data) => request('PUT', `/members/${memberId}/account`, data),
+  removeAccount: (memberId) => request('DELETE', `/members/${memberId}/account`),
   history: (params) => request('GET', `/history${qs(params)}`),
   settings: () => request('GET', '/settings'),
   saveSettings: (data) => request('PUT', '/settings', data),

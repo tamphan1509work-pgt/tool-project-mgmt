@@ -208,6 +208,25 @@ CREATE TABLE IF NOT EXISTS history (
 CREATE INDEX IF NOT EXISTS idx_history_entity ON history(entity, entity_id);
 CREATE INDEX IF NOT EXISTS idx_history_project ON history(project_id, id);
 
+-- Tài khoản đăng nhập (gắn với thành viên; đăng nhập bằng email của thành viên)
+CREATE TABLE IF NOT EXISTS accounts (
+  member_id      INTEGER PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
+  password_hash  TEXT NOT NULL,
+  is_admin       INTEGER NOT NULL DEFAULT 0,
+  disabled       INTEGER NOT NULL DEFAULT 0,
+  last_login_at  TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Phiên đăng nhập (chỉ lưu SHA-256 của token)
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash  TEXT PRIMARY KEY,
+  member_id   INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_member ON sessions(member_id);
+
 -- Cài đặt hệ thống (key -> JSON)
 CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,

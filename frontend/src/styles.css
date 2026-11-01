@@ -689,3 +689,65 @@ input:focus, select:focus, textarea:focus {
 .checkbox-field { padding: 6px 0; }
 .field .toggle { justify-content: flex-start; padding: 2px 0; }
 .field .toggle input[type='checkbox'] { width: auto; flex: 0 0 auto; }
+
+/* ---------- Menu trái thu gọn ---------- */
+.sidebar { display: flex; flex-direction: column; transition: width 0.18s ease; }
+.sidebar nav { flex: 1 1 auto; }
+.collapse-btn {
+  display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 12px; border: none; border-radius: 8px;
+  background: transparent; color: var(--sidebar-text); cursor: pointer; font: inherit; text-align: left;
+}
+.collapse-btn:hover { background: var(--nav-hover); color: var(--sidebar-strong); }
+.project-chip {
+  display: block; margin: 12px 4px; padding: 6px 0; border-radius: 8px; text-align: center; font-weight: 700; font-size: 12px;
+  background: var(--nav-hover); color: var(--sidebar-strong); letter-spacing: 0.03em; overflow: hidden; text-overflow: ellipsis;
+}
+.project-chip:hover { text-decoration: none; outline: 1px solid var(--primary); }
+@media (min-width: 861px) {
+  .sidebar-collapsed .sidebar { width: 68px; padding-left: 10px; padding-right: 10px; }
+  .sidebar-collapsed .nav-label, .sidebar-collapsed .nav-sub, .sidebar-collapsed .project-switcher { display: none; }
+  .sidebar-collapsed .nav-link, .sidebar-collapsed .collapse-btn, .sidebar-collapsed .brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  .sidebar-collapsed .brand { padding-bottom: 18px; }
+}
+@media (max-width: 860px) { .collapse-btn { display: none; } }
+
+/* ---------- Đăng nhập & menu người dùng ---------- */
+.login-page {
+  min-height: 100%; display: grid; place-items: center; background: var(--bg);
+  padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.login-card { width: 100%; max-width: 420px; padding: 28px 28px 24px; }
+.login-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; margin-bottom: 18px; }
+.login-brand .brand-logo { width: 30px; height: 30px; border-radius: 8px; background: var(--primary); color: var(--on-accent); display: grid; place-items: center; }
+.login-card h1 { font-size: 22px; margin-bottom: 6px; text-wrap: balance; }
+.login-card > p { margin: 0 0 18px; }
+.login-form { display: flex; flex-direction: column; gap: 14px; }
+.login-form .field input { width: 100%; }
+.login-submit { justify-content: center; padding: 10px 14px; }
+.password-input { display: flex; gap: 6px; }
+.password-input input { flex: 1 1 auto; }
+.demo-accounts { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.demo-accounts ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.user-menu { position: relative; }
+.user-btn {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: 999px; padding: 3px 12px 3px 3px; cursor: pointer; font: inherit; color: var(--text);
+}
+.user-btn:hover { background: var(--surface-2); }
+.user-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+@media (max-width: 640px) { .user-name { display: none; } .user-btn { padding-right: 3px; } }
+.user-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 240px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+.user-info { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.user-item {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; border: none; background: none; border-radius: 6px;
+  font: inherit; color: var(--text); cursor: pointer;
+}
+.user-item:hover { background: var(--surface-2); text-decoration: none; }
+.user-item.danger { color: var(--danger); }
+.form-grid.single { grid-template-columns: 1fr; }
+.account-box { display: flex; flex-direction: column; gap: 10px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-fieldset { border: none; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }

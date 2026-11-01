@@ -1,11 +1,13 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
 import Gantt, { ZOOMS } from '../components/Gantt.jsx';
 import ResourceList, { useParamSetter } from '../components/ResourceList.jsx';
-import { Badge, ErrorBox, Loading } from '../components/ui.jsx';
-import { code, fmtDate, isOverdue } from '../constants.js';
-import { useAsync, useLookup, useProject } from '../context.jsx';
+import { Badge, ErrorBox, Loading, Modal } from '../components/ui.jsx';
+import { code, fmtDate, fmtDateTime, isOverdue } from '../constants.js';
+import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
+import { useAuth } from '../auth.jsx';
 import { memberFields } from '../forms.js';
 
 const TABS = [
@@ -119,6 +121,21 @@ export function MemberList() {
               ),
             },
             { key: 'email', title: 'Email', width: 220, className: 'small' },
+            {
+              key: 'has_account',
+              title: 'Tài khoản',
+              width: 130,
+              render: (m) =>
+                !m.has_account ? (
+                  <span className="muted small">Chưa có</span>
+                ) : m.account_disabled ? (
+                  <span className="badge badge-red">Đã khoá</span>
+                ) : m.is_admin ? (
+                  <span className="badge badge-purple">Quản trị</span>
+                ) : (
+                  <span className="badge badge-green">Đăng nhập được</span>
+                ),
+            },
             { key: 'phone', title: 'Điện thoại', width: 130, className: 'small' },
             { key: 'project_count', title: 'Số dự án', sort: 'project_count', width: 100, className: 'num' },
             {
@@ -177,6 +194,169 @@ function MemberGantt({ member }) {
   );
 }
 
+function SetPasswordModal({ title, onClose, onSave }) {
+  const [pw, setPw] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await onSave(pw);
+    } catch (err) {
+      setError(Object.values(err.details ?? {})[0] ?? err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title={title} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <div className="field">
+          <label htmlFor="account-password">Mật khẩu (ít nhất 6 ký tự)</label>
+          <input
+            id="account-password"
+            type="text"
+            autoComplete="new-password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            autoFocus
+            required
+          />
+          <div className="hint">Gửi mật khẩu này cho thành viên; họ có thể tự đổi sau khi đăng nhập.</div>
+        </div>
+        {error && <div className="error-box">{error}</div>}
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={onClose}>
+            Huỷ
+          </button>
+          <button className="btn btn-primary" disabled={busy || pw.length < 6}>
+            Lưu
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Tài khoản đăng nhập của thành viên (quản trị viên quản lý) */
+function AccountSection({ member, reload }) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [modal, setModal] = useState(null); // 'create' | 'reset'
+  const { data: acc, reload: reloadAcc } = useAsync(() => api.account(member.id), [member.id, member.updated_at]);
+  const isSelf = user?.id === member.id;
+  const isAdmin = user?.is_admin;
+
+  const save = async (patch, msg) => {
+    try {
+      await api.saveAccount(member.id, patch);
+      toast(msg);
+      reloadAcc();
+      reload();
+    } catch (err) {
+      toast(Object.values(err.details ?? {})[0] ?? err.message, 'error');
+      throw err;
+    }
+  };
+  const remove = async () => {
+    if (!(await confirm(`Xoá tài khoản đăng nhập của ${member.name}? Thành viên vẫn được giữ lại.`))) return;
+    try {
+      await api.removeAccount(member.id);
+      toast('Đã xoá tài khoản đăng nhập');
+      reloadAcc();
+      reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  return (
+    <Section title="Tài khoản đăng nhập">
+      {acc === null || acc === undefined ? (
+        <div className="account-box">
+          <div className="muted">
+            {acc === undefined ? 'Đang tải…' : 'Chưa có tài khoản. Thành viên này chưa đăng nhập được vào hệ thống.'}
+          </div>
+          {isAdmin && acc === null && (
+            <div className="account-actions">
+              <button className="btn btn-primary btn-sm" onClick={() => setModal('create')} disabled={!member.email}>
+                Tạo tài khoản
+              </button>
+              {!member.email && <span className="muted small">Cần có email (dùng để đăng nhập).</span>}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="account-box">
+          <InfoList
+            items={[
+              ['Email đăng nhập', member.email],
+              [
+                'Trạng thái',
+                acc.disabled ? (
+                  <span className="badge badge-red">Đã khoá</span>
+                ) : (
+                  <span className="badge badge-green">Đang hoạt động</span>
+                ),
+              ],
+              ['Quyền', acc.is_admin ? <span className="badge badge-purple">Quản trị viên</span> : 'Thành viên'],
+              ['Đăng nhập gần nhất', fmtDateTime(acc.last_login_at) || 'Chưa đăng nhập'],
+            ]}
+          />
+          {isSelf && <div className="muted small">Đổi mật khẩu của bạn ở menu tài khoản (góc trên bên phải).</div>}
+          {isAdmin && (
+            <div className="account-actions">
+              <button className="btn btn-sm" onClick={() => setModal('reset')}>
+                Đặt lại mật khẩu
+              </button>
+              {!isSelf && (
+                <>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      save(
+                        { is_admin: !acc.is_admin },
+                        acc.is_admin ? 'Đã gỡ quyền quản trị' : 'Đã cấp quyền quản trị',
+                      ).catch(() => {})
+                    }
+                  >
+                    {acc.is_admin ? 'Gỡ quyền quản trị' : 'Cấp quyền quản trị'}
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() =>
+                      save(
+                        { disabled: !acc.disabled },
+                        acc.disabled ? 'Đã mở khoá tài khoản' : 'Đã khoá tài khoản',
+                      ).catch(() => {})
+                    }
+                  >
+                    {acc.disabled ? 'Mở khoá' : 'Khoá tài khoản'}
+                  </button>
+                  <button className="btn btn-sm btn-danger-ghost" onClick={remove}>
+                    Xoá tài khoản
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {modal && (
+        <SetPasswordModal
+          title={modal === 'create' ? `Tạo tài khoản cho ${member.name}` : `Đặt lại mật khẩu cho ${member.name}`}
+          onClose={() => setModal(null)}
+          onSave={async (password) => {
+            await save({ password }, modal === 'create' ? 'Đã tạo tài khoản đăng nhập' : 'Đã đặt lại mật khẩu');
+            setModal(null);
+          }}
+        />
+      )}
+    </Section>
+  );
+}
+
 export function MemberDetail() {
   const { refreshLookup } = useLookup();
   return (
@@ -189,7 +369,7 @@ export function MemberDetail() {
       onChanged={refreshLookup}
       badges={(m) => m.position && <span className="badge badge-gray">{m.position}</span>}
     >
-      {(m) => {
+      {(m, { reload }) => {
         const openTasks = m.tasks.filter((t) => t.status !== 'done');
         return (
           <>
@@ -274,6 +454,7 @@ export function MemberDetail() {
                 </Section>
               </div>
               <aside className="detail-side">
+                <AccountSection member={m} reload={reload} />
                 <Section title="Thông tin liên hệ">
                   <InfoList
                     items={[

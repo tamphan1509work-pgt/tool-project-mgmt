@@ -315,7 +315,7 @@ export function createResource(db, cfg) {
 
   router.post('/', (req, res) => {
     const data = validate(db, cfg.fields, req.body);
-    cfg.beforeSave?.(data, null, db);
+    cfg.beforeSave?.(data, null, db, req);
     checkSameProject(data, null);
     const links = splitLinks(data);
     const cols = Object.keys(data);
@@ -338,7 +338,7 @@ export function createResource(db, cfg) {
     const id = parseId(req.params.id);
     const existing = mustGet(id);
     const data = validate(db, cfg.fields, req.body, { partial: true });
-    cfg.beforeSave?.(data, existing, db);
+    cfg.beforeSave?.(data, existing, db, req);
     checkSameProject(data, existing);
     const links = splitLinks(data);
     const cols = Object.keys(data);
@@ -365,6 +365,7 @@ export function createResource(db, cfg) {
   router.delete('/:id', (req, res) => {
     const id = parseId(req.params.id);
     const row = mustGet(id);
+    cfg.beforeDelete?.(db, row, req);
     transaction(db, () => {
       // Xoá dự án thì lịch sử của dự án cũng bị xoá theo (FK), nên không ghi thêm
       if (table !== 'projects') log(req, row, 'delete', { summary: `Xoá ${cfg.label} "${nameOf(row)}"` });

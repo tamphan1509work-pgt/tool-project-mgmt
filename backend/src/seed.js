@@ -6,6 +6,11 @@ import { openDb, transaction } from './db.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const DB_FILE = process.env.DB_FILE || resolve(here, '../data/pm.db');
 
+// Băm sẵn của mật khẩu mẫu "123456" (PBKDF2-SHA256, 210000 vòng)
+export const SAMPLE_PASSWORD = '123456';
+const SAMPLE_PASSWORD_HASH =
+  'pbkdf2$210000$a1b2c3d4e5f60718293a4b5c6d7e8f90$d7333f09c24a90326229377a950fba2e90cdcd1d992fa14e4ba50faf6e5365a1';
+
 const day = (offset) => {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -22,6 +27,8 @@ const TABLES = [
   'tasks',
   'meetings',
   'documents',
+  'sessions',
+  'accounts',
   'history',
   'notification_log',
   'settings',
@@ -85,6 +92,11 @@ export function seed(db, { reset = false } = {}) {
     ]) {
       people[name] = insert('members', { name, email, position, phone });
     }
+    // Tài khoản đăng nhập mẫu: mật khẩu "123456" (hash tính sẵn, chỉ dùng cho dữ liệu mẫu — hãy đổi khi dùng thật)
+    for (const name of Object.keys(people)) {
+      insert('accounts', { member_id: people[name], password_hash: SAMPLE_PASSWORD_HASH, is_admin: name === 'Nguyễn Văn An' ? 1 : 0 });
+    }
+
     const join = (project, name, role) =>
       insert('project_members', { project_id: project, member_id: people[name], role, joined_at: day(-21) });
     join(pay, 'Nguyễn Văn An', 'pm');

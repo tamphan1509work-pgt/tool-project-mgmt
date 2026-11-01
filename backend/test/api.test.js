@@ -624,3 +624,139 @@ describe('categories', () => {
     assert.equal(r.body.items[0].category_id, null);
   });
 });
+
+describe('history', () => {
+  test('ghi lại tạo / sửa (kèm giá trị cũ-mới) / liên kết / chạy test / xoá, có người thực hiện', async () => {
+    const headers = { 'Content-Type': 'application/json', 'X-Actor': encodeURIComponent('Trần Thị Bình') };
+    const call = async (method, path, body) => {
+      const res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, body: res.status === 204 ? null : await res.json() };
+    };
+    const ms = (await call('POST', '/milestones', { project_id: P, name: 'MS hist', due_date: '2026-12-01' })).body;
+    const t = (await call('POST', '/tasks', { project_id: P, title: 'Hist task', priority: 'low' })).body;
+    const doc = (await call('POST', '/documents', { project_id: P, title: 'Hist doc' })).body;
+    await call('PATCH', `/tasks/${t.id}`, { priority: 'high', title: 'Hist task 2', milestone_id: ms.id, document_ids: [doc.id] });
+    await call('PATCH', `/tasks/${t.id}`, { priority: 'high' }); // không đổi -> không ghi
+    const other = (await call('POST', '/tasks', { project_id: P, title: 'Hist other' })).body;
+    await call('POST', `/tasks/${t.id}/links`, { other_task_id: other.id, type: 'depends_on' });
+
+    let r = await req('GET', `/history?entity=tasks&entity_id=${t.id}`);
+    assert.deepEqual(r.body.items.map((h) => h.action), ['link', 'update', 'create']);
+    assert.ok(r.body.items.every((h) => h.actor === 'Trần Thị Bình'));
+    const upd = r.body.items[1].changes;
+    assert.deepEqual(upd.find((c) => c.field === 'priority'), { field: 'priority', from: 'low', to: 'high' });
+    assert.equal(upd.find((c) => c.field === 'title').to, 'Hist task 2');
+    assert.equal(upd.find((c) => c.field === 'milestone_id').toText, 'MS hist');
+    assert.deepEqual(upd.find((c) => c.field === 'document_ids').added, [{ id: doc.id, label: 'Hist doc' }]);
+
+    const tc = (await call('POST', '/test-cases', { project_id: P, title: 'Hist TC' })).body;
+    await call('POST', `/test-cases/${tc.id}/runs`, { result: 'failed', note: 'lỗi' });
+    r = await req('GET', `/history?entity=test-cases&entity_id=${tc.id}`);
+    assert.match(r.body.items[0].summary, /Không đạt/);
+
+    await call('DELETE', `/tasks/${other.id}`);
+    r = await req('GET', `/history?project_id=${P}&limit=5`);
+    assert.equal(r.body.items[0].action, 'delete');
+    assert.match(r.body.items[0].summary, /Hist other/);
+
+    const lan = (await call('POST', `/projects/${P}/members`, { name: 'Hist người', role: 'tester' })).body;
+    r = await req('GET', `/history?entity=projects&entity_id=${P}`);
+    assert.match(r.body.items[0].summary, /Hist người/);
+    await call('PATCH', `/members/${lan.id}`, { position: 'QA' });
+    r = await req('GET', `/history?entity=members&entity_id=${lan.id}`);
+    assert.equal(r.body.items[0].project_id, null);
+  });
+});
+
+describe('milestones', () => {
+  test('tiến độ theo task, ràng buộc ngày & dự án, xoá milestone gỡ khỏi task', async () => {
+    let r = await req('POST', '/milestones', { project_id: P, name: 'Thiếu hạn' });
+    assert.equal(r.status, 400);
+    r = await req('POST', '/milestones', { project_id: P, name: 'X', start_date: '2026-05-10', due_date: '2026-05-01' });
+    assert.ok(r.body.details.due_date);
+    const m = (await req('POST', '/milestones', { project_id: P, name: 'Release 1', due_date: '2026-06-30' })).body;
+    assert.equal(m.status, 'planned');
+    const a = (await req('POST', '/tasks', { project_id: P, title: 'M a', milestone_id: m.id, status: 'done' })).body;
+    await req('POST', '/tasks', { project_id: P, title: 'M b', milestone_id: m.id });
+    assert.equal((await req('POST', '/tasks', { project_id: P2, title: 'x', milestone_id: m.id })).status, 400);
+    r = await req('GET', `/milestones?project_id=${P}&q=Release`);
+    assert.equal(r.body.items[0].task_count, 2);
+    assert.equal(r.body.items[0].done_count, 1);
+    r = await req('GET', `/milestones/${m.id}`);
+    assert.equal(r.body.tasks.length, 2);
+    r = await req('PATCH', `/milestones/${m.id}`, { status: 'completed' });
+    assert.ok(r.body.completed_at);
+    assert.equal((await req('GET', `/tasks?project_id=${P}&milestone_id=${m.id}`)).body.total, 2);
+    await req('DELETE', `/milestones/${m.id}`);
+    assert.equal((await req('GET', `/tasks/${a.id}`)).body.milestone_id, null);
+  });
+});
+
+describe('settings & deadline notifications', () => {
+  test('cài đặt: kiểm tra giá trị, lưu, ghi lịch sử', async () => {
+    let r = await req('GET', '/settings');
+    assert.equal(r.body.settings.web_enabled, true);
+    assert.equal(r.body.email.configured, false);
+    r = await req('PUT', '/settings', { remind_days_before: 99, extra_emails: 'a@b.com, xx', email_hour: 25 });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.details.remind_days_before && r.body.details.extra_emails && r.body.details.email_hour);
+    r = await req('PUT', '/settings', { web_enabled: false, extra_emails: 'boss@x.com;  qa@x.com' });
+    assert.equal(r.body.settings.extra_emails, 'boss@x.com, qa@x.com');
+    assert.deepEqual((await req('GET', '/notifications')).body, { enabled: false, items: [] });
+    r = await req('GET', '/history?entity=settings');
+    assert.ok(r.body.items[0].changes.some((c) => c.field === 'web_enabled'));
+    await req('PUT', '/settings', { web_enabled: true, extra_emails: '' });
+  });
+
+  test('thông báo web & email: trễ / sắp đến hạn, người nhận, không gửi trùng trong ngày', async () => {
+    const { runEmailNotifications, buildEmailDigests, getSettings } = await import('../src/notify.js');
+    const { today } = await import('../src/resource.js');
+    const d = (n) => new Date(Date.now() + n * 86400000).toLocaleDateString('sv');
+    const p = (await req('POST', '/projects', { code: 'NTF', name: 'Notify' })).body.id;
+    const pm = (await req('POST', `/projects/${p}/members`, { name: 'PM Ntf', email: 'pm@ntf.vn', role: 'pm' })).body;
+    await req('POST', `/projects/${p}/members`, { name: 'Dev Ntf', email: 'dev@ntf.vn', role: 'developer' });
+    const late = (await req('POST', '/tasks', { project_id: p, title: 'Trễ', assignee: 'dev ntf', due_date: d(-2) })).body;
+    await req('POST', '/tasks', { project_id: p, title: 'Sắp hạn', assignee: 'Dev Ntf', due_date: d(1) });
+    await req('POST', '/tasks', { project_id: p, title: 'Còn xa', assignee: 'Dev Ntf', due_date: d(10) });
+    await req('POST', '/tasks', { project_id: p, title: 'Xong', assignee: 'Dev Ntf', due_date: d(-5), status: 'done' });
+    await req('POST', '/milestones', { project_id: p, name: 'MS trễ', due_date: d(-1) });
+
+    let r = await req('GET', `/notifications?project_id=${p}`);
+    assert.deepEqual(r.body.items.map((i) => `${i.type}:${i.title}:${i.kind}`), [
+      'task:Trễ:overdue',
+      'milestone:MS trễ:overdue',
+      'task:Sắp hạn:due_soon',
+    ]);
+    assert.equal(r.body.items[0].days, -2);
+
+    const settings = { ...getSettings(db), email_enabled: true };
+    const digests = buildEmailDigests(db, settings).filter((x) => x.to.endsWith('@ntf.vn'));
+    const dev = digests.find((x) => x.to === 'dev@ntf.vn');
+    const boss = digests.find((x) => x.to === 'pm@ntf.vn');
+    assert.equal(dev.items.length, 2, 'dev nhận task của mình');
+    assert.equal(boss.items.length, 3, 'PM nhận cả milestone');
+    assert.match(dev.subject, /1 mục trễ hạn, 1 mục sắp đến hạn/);
+    assert.match(dev.text, /TASK-\d+ Trễ/);
+
+    // tắt email của PM
+    await req('PATCH', `/members/${pm.id}`, { email_notifications: false });
+    const sent = [];
+    const mailer = { send: async (m) => sent.push(m) };
+    let report = await runEmailNotifications(db, { mailer, settings });
+    assert.ok(sent.some((m) => m.to === 'dev@ntf.vn'));
+    assert.ok(!sent.some((m) => m.to === 'pm@ntf.vn'));
+    const before = sent.length;
+    report = await runEmailNotifications(db, { mailer, settings });
+    assert.equal(sent.length, before, 'không gửi lại trong cùng ngày');
+    assert.ok(report.skipped.some((x) => x.to === 'dev@ntf.vn'));
+    await runEmailNotifications(db, { mailer, settings, force: true });
+    assert.ok(sent.length > before, 'force gửi lại');
+    assert.equal(today().length, 10);
+    void late;
+
+    // API: chưa cấu hình SMTP -> 400; xem trước vẫn được
+    assert.equal((await req('POST', '/notifications/email/run', {})).status, 400);
+    r = await req('POST', '/notifications/email/preview', {});
+    assert.ok(r.body.digests.some((x) => x.to === 'dev@ntf.vn'));
+  });
+});

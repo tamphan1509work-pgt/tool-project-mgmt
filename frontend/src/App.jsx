@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { resetDemo } from './api.js';
 import { hashToPath, pathToHash } from './links.js';
 import { Empty, Icon, Loading } from './components/ui.jsx';
 import { ConfirmProvider, LookupProvider, ProjectProvider, ToastProvider, useConfirm, useProject } from './context.jsx';
 import { BugDetail, BugList } from './pages/Bugs.jsx';
-import { CategoryList } from './pages/Categories.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { DocumentDetail, DocumentList } from './pages/Documents.jsx';
 import { MeetingDetail, MeetingList } from './pages/Meetings.jsx';
 import { MemberDetail, MemberList } from './pages/Members.jsx';
+import { MilestoneDetail } from './pages/Milestones.jsx';
+import SettingsPage from './pages/Settings.jsx';
+import { ActorSelect, NotificationBell } from './components/TopbarTools.jsx';
 import { ProjectDetail, ProjectList } from './pages/Projects.jsx';
 import { TaskDetail, TaskList } from './pages/Tasks.jsx';
 import { TestCaseDetail, TestCaseList } from './pages/TestCases.jsx';
@@ -32,7 +34,8 @@ const TITLES = {
   '': 'Tổng quan dự án',
   projects: 'Quản lý dự án',
   members: 'Quản lý thành viên',
-  categories: 'Danh mục dự án',
+  milestones: 'Milestone',
+  settings: 'Cài đặt thông báo',
   meetings: 'Quản lý meeting minutes',
   tasks: 'Quản lý task',
   'test-cases': 'Test report',
@@ -49,7 +52,7 @@ function ProjectSwitcher() {
     setProjectId(Number(e.target.value));
     // Đang xem chi tiết một bản ghi -> quay về danh sách của dự án mới
     const [, section, id] = pathname.split('/');
-    if (id && !['projects', 'members'].includes(section)) navigate(`/${section}`);
+    if (id && !['projects', 'members', 'milestones'].includes(section)) navigate(`/${section}`);
   };
   return (
     <div className="project-switcher">
@@ -103,6 +106,12 @@ function RequireProject({ children }) {
   return children;
 }
 
+/** Đường dẫn cũ /categories -> tab Danh mục trong chi tiết dự án đang chọn */
+function CategoriesRedirect() {
+  const { projectId } = useProject();
+  return <Navigate replace to={`/projects/${projectId}?tab=categories`} />;
+}
+
 /** Bản demo: giữ "#tên" trên thanh địa chỉ khớp với trang đang xem và ngược lại */
 function DemoHashSync() {
   const { pathname } = useLocation();
@@ -149,7 +158,7 @@ function Layout({ children, onReset }) {
   const section = pathname.split('/')[1] ?? '';
   const { project } = useProject();
   const base = TITLES[section] ?? '';
-  const title = ['projects', 'members'].includes(section) || !project ? base : `${base} · ${project.code}`;
+  const title = ['projects', 'members', 'settings'].includes(section) || !project ? base : `${base} · ${project.code}`;
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -166,9 +175,6 @@ function Layout({ children, onReset }) {
           <NavLink to="/projects" className="nav-link">
             <Icon name="folder" /> Dự án
           </NavLink>
-          <NavLink to="/categories" className="nav-link nav-sub">
-            Danh mục
-          </NavLink>
           <NavLink to="/members" className="nav-link">
             <Icon name="people" /> Thành viên
           </NavLink>
@@ -179,6 +185,10 @@ function Layout({ children, onReset }) {
             </NavLink>
           ))}
           <DocumentsNav />
+          <div className="nav-sep" />
+          <NavLink to="/settings" className="nav-link">
+            <Icon name="gear" /> Cài đặt
+          </NavLink>
         </nav>
       </aside>
       <div className="nav-scrim no-print" onClick={() => setOpen(false)} />
@@ -188,7 +198,11 @@ function Layout({ children, onReset }) {
             <Icon name="menu" />
           </button>
           <h1 className="page-title">{title}</h1>
-          {import.meta.env.MODE === 'demo' && <DemoBanner onReset={onReset} />}
+          <div className="topbar-tools">
+            {import.meta.env.MODE === 'demo' && <DemoBanner onReset={onReset} />}
+            <ActorSelect />
+            <NotificationBell />
+          </div>
           {import.meta.env.MODE === 'demo' && <DemoHashSync />}
         </header>
         <main className="content">{children}</main>
@@ -220,7 +234,16 @@ export default function App() {
                   path="/categories"
                   element={
                     <RequireProject>
-                      <CategoryList />
+                      <CategoriesRedirect />
+                    </RequireProject>
+                  }
+                />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route
+                  path="/milestones/:id"
+                  element={
+                    <RequireProject>
+                      <MilestoneDetail />
                     </RequireProject>
                   }
                 />

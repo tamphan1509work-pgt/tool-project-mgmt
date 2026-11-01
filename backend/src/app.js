@@ -8,6 +8,7 @@ import {
   bugs,
   categories,
   documents,
+  milestones,
   ENUMS,
   meetings,
   members,
@@ -19,6 +20,9 @@ import {
   testCases,
   testRuns,
 } from './resources.js';
+
+import { actorOf, listHistory, recordHistory, refLabel } from './history.js';
+import { deadlineItems, buildEmailDigests, getSettings, runEmailNotifications, saveSettings } from './notify.js';
 
 const DEFAULT_MAX_UPLOAD = 10 * 1024 * 1024; // 10 MB / file
 
@@ -33,6 +37,17 @@ function decodeBase64(b64) {
 }
 
 const fmtMB = (bytes) => `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
+
+const ROLE = {
+  pm: 'PM',
+  ba: 'BA',
+  tech_lead: 'Trưởng nhóm kỹ thuật',
+  developer: 'Lập trình viên',
+  tester: 'Tester',
+  designer: 'Designer',
+  devops: 'DevOps',
+  stakeholder: 'Stakeholder',
+};
 
 const countBy = (db, table, col, projectId) => {
   const rows = db
@@ -55,7 +70,11 @@ const requireProject = (db, query) => {
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {{ staticDir?: string }} [opts]
  */
-export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD } = {}) {
+/**
+ * mailer: { send({ to, subject, text, html }), from } để gửi email nhắc deadline (null = chưa cấu hình SMTP)
+ * appUrl: địa chỉ web dùng để tạo link trong email
+ */
+export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD, mailer = null, appUrl = '' } = {}) {
   const app = express();
   app.disable('x-powered-by');
   // File đính kèm gửi dạng base64 trong JSON (lớn hơn file gốc ~33%)
@@ -66,6 +85,12 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.get('/enums', (_req, res) => res.json(ENUMS));
   api.get('/config', (_req, res) => res.json({ maxUploadBytes }));
+
+  // Ghi lịch sử cho các thao tác ngoài CRUD chung
+  const projectOf = (table, id) => db.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).get(id)?.project_id ?? null;
+  const logAction = (req, entity, entityId, projectId, action, summary, changes) =>
+    recordHistory(db, { projectId, entity, entityId, action, summary, changes, actor: actorOf(req) });
+  const taskCode = (id) => `TASK-${String(id).padStart(3, '0')}`;
 
   // ---- File đính kèm: biên bản họp và lần chạy test ----
   const ATTACH_COLS = 'id, meeting_id, test_run_id, name, mime_type, size, created_at';
@@ -92,15 +117,25 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
     if (!db.prepare('SELECT 1 FROM meetings WHERE id = ?').get(meetingId)) {
       throw new HttpError(404, `Không tìm thấy cuộc họp #${meetingId}`);
     }
-    res.status(201).json(addAttachment('meeting_id', meetingId, req.body));
+    const file = addAttachment('meeting_id', meetingId, req.body);
+    logAction(req, 'meetings', meetingId, projectOf('meetings', meetingId), 'attach', `Đính kèm file "${file.name}"`);
+    res.status(201).json(file);
   });
 
   api.post('/test-runs/:id/attachments', (req, res) => {
     const runId = parseId(req.params.id);
-    if (!db.prepare('SELECT 1 FROM test_runs WHERE id = ?').get(runId)) {
-      throw new HttpError(404, `Không tìm thấy lần chạy test #${runId}`);
-    }
-    res.status(201).json(addAttachment('test_run_id', runId, req.body));
+    const run = db.prepare('SELECT test_case_id FROM test_runs WHERE id = ?').get(runId);
+    if (!run) throw new HttpError(404, `Không tìm thấy lần chạy test #${runId}`);
+    const file = addAttachment('test_run_id', runId, req.body);
+    logAction(
+      req,
+      'test-cases',
+      run.test_case_id,
+      projectOf('test_cases', run.test_case_id),
+      'attach',
+      `Đính kèm file "${file.name}" vào lần chạy #${runId}`,
+    );
+    res.status(201).json(file);
   });
 
   api.get('/attachments/:id/download', (req, res) => {
@@ -122,8 +157,21 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
   });
 
   api.delete('/attachments/:id', (req, res) => {
-    const info = db.prepare('DELETE FROM attachments WHERE id = ?').run(parseId(req.params.id));
-    if (!info.changes) throw new HttpError(404, 'Không tìm thấy file');
+    const id = parseId(req.params.id);
+    const file = db
+      .prepare(
+        `SELECT a.name, a.meeting_id, r.test_case_id FROM attachments a
+         LEFT JOIN test_runs r ON r.id = a.test_run_id WHERE a.id = ?`,
+      )
+      .get(id);
+    if (!file) throw new HttpError(404, 'Không tìm thấy file');
+    db.prepare('DELETE FROM attachments WHERE id = ?').run(id);
+    if (file.meeting_id) {
+      logAction(req, 'meetings', file.meeting_id, projectOf('meetings', file.meeting_id), 'detach', `Xoá file "${file.name}"`);
+    } else if (file.test_case_id) {
+      const pid = projectOf('test_cases', file.test_case_id);
+      logAction(req, 'test-cases', file.test_case_id, pid, 'detach', `Xoá file "${file.name}"`);
+    }
     res.status(204).end();
   });
 
@@ -177,12 +225,24 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
     }
 
     db.prepare('INSERT INTO task_links (task_id, other_task_id, type) VALUES (?, ?, ?)').run(from, to, type);
+    const text = { depends_on: 'phụ thuộc vào', blocks: 'đang chặn', relates: 'liên quan tới' }[data.type];
+    logAction(req, 'tasks', taskId, task.project_id, 'link', `Thêm liên kết: ${text} ${taskCode(other.id)} "${refLabel(db, 'tasks', other.id)}"`);
     res.status(201).json(taskLinks(db, taskId));
   });
 
   api.delete('/task-links/:id', (req, res) => {
-    const info = db.prepare('DELETE FROM task_links WHERE id = ?').run(parseId(req.params.id));
-    if (!info.changes) throw new HttpError(404, 'Không tìm thấy liên kết');
+    const id = parseId(req.params.id);
+    const link = db.prepare('SELECT * FROM task_links WHERE id = ?').get(id);
+    if (!link) throw new HttpError(404, 'Không tìm thấy liên kết');
+    db.prepare('DELETE FROM task_links WHERE id = ?').run(id);
+    logAction(
+      req,
+      'tasks',
+      link.task_id,
+      projectOf('tasks', link.task_id),
+      'unlink',
+      `Gỡ liên kết ${link.type === 'relates' ? 'liên quan' : 'phụ thuộc'} với ${taskCode(link.other_task_id)}`,
+    );
     res.status(204).end();
   });
 
@@ -210,6 +270,8 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
       ).run(data.result, row.executed_at, id);
       return row;
     });
+    const label = { passed: 'Đạt', failed: 'Không đạt', blocked: 'Bị chặn' }[data.result];
+    logAction(req, 'test-cases', id, projectOf('test_cases', id), 'run', `Thực thi test: ${label}${data.note ? ` — ${data.note}` : ''}`);
     res.status(201).json(run);
   });
 
@@ -229,6 +291,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
         run.test_case_id,
       );
     });
+    logAction(req, 'test-cases', run.test_case_id, projectOf('test_cases', run.test_case_id), 'delete-run', `Xoá lần chạy #${id}`);
     res.status(204).end();
   });
 
@@ -269,6 +332,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
         memberId,
         data.role ?? 'developer',
       );
+      logAction(req, 'projects', projectId, projectId, 'member', `Thêm thành viên "${refLabel(db, 'members', memberId)}" (${ROLE[data.role ?? 'developer']})`);
     });
     res.status(201).json(projectMembers(db, projectId).find((m) => m.id === memberId));
   });
@@ -281,15 +345,16 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
       .prepare('UPDATE project_members SET role = ? WHERE project_id = ? AND member_id = ?')
       .run(data.role, projectId, memberId);
     if (!info.changes) throw new HttpError(404, 'Người này không thuộc dự án');
+    logAction(req, 'projects', projectId, projectId, 'member', `Đổi vai trò của "${refLabel(db, 'members', memberId)}" thành ${ROLE[data.role]}`);
     res.json(projectMembers(db, projectId).find((m) => m.id === memberId));
   });
 
   api.delete('/projects/:id/members/:memberId', (req, res) => {
     const projectId = mustProject(req.params.id);
-    const info = db
-      .prepare('DELETE FROM project_members WHERE project_id = ? AND member_id = ?')
-      .run(projectId, parseId(req.params.memberId));
+    const memberId = parseId(req.params.memberId);
+    const info = db.prepare('DELETE FROM project_members WHERE project_id = ? AND member_id = ?').run(projectId, memberId);
     if (!info.changes) throw new HttpError(404, 'Người này không thuộc dự án');
+    logAction(req, 'projects', projectId, projectId, 'member', `Gỡ thành viên "${refLabel(db, 'members', memberId)}" khỏi dự án`);
     res.status(204).end();
   });
 
@@ -442,6 +507,60 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
   api.use('/members', createResource(db, members));
   api.use('/documents', createResource(db, documents));
   api.use('/categories', createResource(db, categories));
+  api.use('/milestones', createResource(db, milestones));
+
+  // ---- Lịch sử thay đổi ----
+  api.get('/history', (req, res) => {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    res.json(
+      listHistory(db, {
+        entity: typeof req.query.entity === 'string' ? req.query.entity : null,
+        entityId: req.query.entity_id ? parseId(req.query.entity_id) : null,
+        projectId: req.query.project_id ? parseId(req.query.project_id) : null,
+        limit,
+        offset,
+      }),
+    );
+  });
+
+  // ---- Cài đặt & thông báo deadline ----
+  const emailStatus = () => ({ configured: Boolean(mailer), from: mailer?.from ?? null });
+  api.get('/settings', (_req, res) => res.json({ settings: getSettings(db), email: emailStatus() }));
+  api.put('/settings', (req, res) => {
+    const [settings, changes] = saveSettings(db, req.body);
+    if (changes.length) {
+      recordHistory(db, { entity: 'settings', entityId: 0, action: 'update', changes, actor: actorOf(req) });
+    }
+    res.json({ settings, email: emailStatus() });
+  });
+
+  // Thông báo trên web: task / milestone trễ hoặc sắp đến hạn
+  api.get('/notifications', (req, res) => {
+    const settings = getSettings(db);
+    if (!settings.web_enabled) return res.json({ enabled: false, items: [] });
+    const projectId = req.query.project_id ? parseId(req.query.project_id) : null;
+    const items = deadlineItems(db, {
+      projectId,
+      daysBefore: settings.remind_days_before,
+      includeMilestones: settings.include_milestones,
+    });
+    res.json({ enabled: true, items });
+  });
+
+  // Xem trước email nhắc deadline (không gửi)
+  api.post('/notifications/email/preview', (_req, res) => {
+    res.json({ digests: buildEmailDigests(db, getSettings(db), { appUrl }), email: emailStatus() });
+  });
+
+  // Gửi email nhắc deadline ngay
+  api.post('/notifications/email/run', async (req, res) => {
+    if (!mailer) {
+      throw new HttpError(400, 'Chưa cấu hình máy chủ gửi email (SMTP). Xem hướng dẫn trong README.');
+    }
+    const report = await runEmailNotifications(db, { mailer, appUrl, force: req.body?.force === true });
+    res.json(report);
+  });
   api.use('/meetings', createResource(db, meetings));
   api.use('/tasks', createResource(db, tasks));
   api.use('/test-cases', createResource(db, testCases));
@@ -457,6 +576,7 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
         allMembers,
         members: [],
         categories: [],
+        milestones: [],
         meetings: [],
         tasks: [],
         testCases: [],
@@ -497,6 +617,9 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
         .all(id),
       categories: db
         .prepare('SELECT id, name, parent_id, color FROM categories WHERE project_id = ? ORDER BY name')
+        .all(id),
+      milestones: db
+        .prepare('SELECT id, name, due_date, status FROM milestones WHERE project_id = ? ORDER BY due_date, id')
         .all(id),
       modules: db
         .prepare(
@@ -561,6 +684,15 @@ export function createApp(db, { staticDir, maxUploadBytes = DEFAULT_MAX_UPLOAD }
            AND status <> 'done' ORDER BY due_date LIMIT 8`,
         )
         .all(p, d, d),
+      milestones: db
+        .prepare(
+          `SELECT m.*,
+             (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = m.id) AS task_count,
+             (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = m.id AND t.status = 'done') AS done_count
+           FROM milestones m WHERE m.project_id = ? AND m.status NOT IN ('completed', 'cancelled')
+           ORDER BY m.due_date LIMIT 5`,
+        )
+        .all(p),
       criticalBugs: db
         .prepare(
           `SELECT * FROM bugs WHERE project_id = ? AND ${OPEN} AND severity IN ('critical','blocker')

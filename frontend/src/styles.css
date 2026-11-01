@@ -606,3 +606,86 @@ input:focus, select:focus, textarea:focus {
 .badge-category { font-weight: 500; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 .documents-field { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .documents-field .pending-files { width: 100%; }
+
+/* ---------- Thanh trên: người thao tác & chuông thông báo ---------- */
+.topbar-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.topbar-tools .demo-banner { margin-left: 0; }
+.actor-select { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.actor-select select { max-width: 190px; padding: 5px 8px; }
+.nav-sep { height: 1px; background: var(--nav-hover); margin: 12px 4px; }
+.bell { position: relative; }
+.bell-btn { position: relative; width: 36px; height: 36px; }
+.bell-btn.has-overdue { color: var(--danger); }
+.bell-count {
+  position: absolute; top: 1px; right: 0; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px;
+  background: var(--danger); color: var(--on-accent); font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+}
+.bell-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: min(400px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18); overflow: hidden;
+}
+.bell-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.bell-head .segmented button { padding: 3px 9px; font-size: 12.5px; }
+.bell-list { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+.bell-list li { border-bottom: 1px solid var(--border); border-left: 3px solid var(--warn); }
+.bell-list li.overdue { border-left-color: var(--danger); }
+.bell-list a { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; color: var(--text); }
+.bell-list a:hover { background: var(--surface-2); text-decoration: none; }
+.bell-title { font-weight: 500; }
+.bell-meta { display: flex; gap: 10px; font-size: 12.5px; }
+.bell-foot { padding: 8px 12px; font-size: 13px; text-align: right; }
+.pad-sm { padding: 14px 12px; }
+.text-warn { color: var(--warn); font-weight: 500; }
+
+/* ---------- Lịch sử thay đổi ---------- */
+.history-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.history-entry { position: relative; padding: 8px 0 10px 18px; border-left: 2px solid var(--border); margin-left: 5px; }
+.history-entry::before {
+  content: ''; position: absolute; left: -6px; top: 13px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--s-blue); border: 2px solid var(--surface);
+}
+.history-create::before { background: var(--s-green); }
+.history-delete::before { background: var(--s-red); }
+.history-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.history-time { margin-left: auto; }
+.history-summary { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.history-changes { margin-top: 6px; border-collapse: collapse; font-size: 13px; max-width: 100%; }
+.history-changes th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 12px 2px 0; vertical-align: top; white-space: nowrap; }
+.history-changes td { padding: 2px 8px 2px 0; vertical-align: top; word-break: break-word; }
+.history-from { color: var(--muted); text-decoration: line-through; }
+
+/* ---------- Milestone, tab dự án, cài đặt ---------- */
+.tab-count { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.ms-progress { display: flex; flex-direction: column; gap: 3px; min-width: 140px; }
+.ms-progress .progress { margin-bottom: 0; }
+.strong-link { font-weight: 600; }
+.settings { display: flex; flex-direction: column; gap: 16px; max-width: 860px; }
+.setting-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.setting-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch {
+  flex: 0 0 auto; width: 40px; height: 22px; border-radius: 999px; background: var(--s-gray); position: relative; transition: background 0.15s;
+}
+.switch::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface); transition: transform 0.15s;
+}
+.setting-toggle input:checked + .switch { background: var(--primary); }
+.setting-toggle input:checked + .switch::after { transform: translateX(18px); }
+.setting-toggle input:focus-visible + .switch { outline: 2px solid var(--primary); outline-offset: 2px; }
+.setting-hint { display: block; font-weight: 400; }
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-top: 16px; }
+.settings-grid.is-disabled { opacity: 0.6; }
+.field-label { font-weight: 600; font-size: 13px; }
+@media (max-width: 640px) { .settings-grid { grid-template-columns: 1fr; } }
+.smtp-status { margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+.smtp-status.ok { background: var(--t-green-bg); color: var(--t-green-fg); }
+.smtp-status.warn { background: var(--t-amber-bg); color: var(--t-amber-fg); }
+.smtp-status code { font-size: 12px; }
+.settings-actions { display: flex; gap: 8px; margin: 12px 0 6px; }
+.settings-save { display: flex; justify-content: flex-end; align-items: center; gap: 12px; position: sticky; bottom: 0; padding: 10px 0; background: var(--bg); }
+.email-previews { display: flex; flex-direction: column; gap: 8px; }
+.email-preview summary { cursor: pointer; padding: 6px 0; }
+.checkbox-field { padding: 6px 0; }
+.field .toggle { justify-content: flex-start; padding: 2px 0; }
+.field .toggle input[type='checkbox'] { width: auto; flex: 0 0 auto; }

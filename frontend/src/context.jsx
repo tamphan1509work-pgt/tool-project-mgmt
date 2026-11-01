@@ -93,6 +93,8 @@ const EMPTY_LOOKUP = {
   tasks: [],
   testCases: [],
   documents: [],
+  categories: [],
+  milestones: [],
   people: [],
   modules: [],
 };

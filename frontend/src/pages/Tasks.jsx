@@ -16,6 +16,14 @@ const FILTERS = [
   { name: 'priority', label: 'Ưu tiên', options: options('priority') },
   { name: 'assignee', label: 'Người làm', source: 'people' },
   categoryFilter,
+  {
+    name: 'milestone_id',
+    label: 'Milestone',
+    optionsFrom: (lookup) => [
+      ...lookup.milestones.map((m) => ({ value: String(m.id), label: m.name })),
+      { value: 'none', label: '(Không thuộc milestone)' },
+    ],
+  },
   { name: 'overdue', label: 'Quá hạn', type: 'toggle' },
   { name: 'parent_id', label: 'Ẩn subtask', type: 'toggle', value: 'none' },
 ];
@@ -287,6 +295,14 @@ export function TaskDetail() {
                       ]
                     : []),
                   ['Danh mục', <CategoryBadge key="c" id={t.category_id} full />],
+                  [
+                    'Milestone',
+                    t.milestone && (
+                      <Link to={`/milestones/${t.milestone.id}`}>
+                        ◆ {t.milestone.name} <span className="muted small">(hạn {fmtDate(t.milestone.due_date)})</span>
+                      </Link>
+                    ),
+                  ],
                   ['Người thực hiện', t.assignee],
                   ['Ngày bắt đầu', fmtDate(t.start_date)],
                   ['Hạn hoàn thành', <Due key="d" task={t} />],

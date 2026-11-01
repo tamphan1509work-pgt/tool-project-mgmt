@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { code, fmtDateTime } from '../constants.js';
 import { useAsync, useConfirm, useLookup, useProject, useToast } from '../context.jsx';
 import CopyLinkButton from './CopyLink.jsx';
+import HistorySection from './History.jsx';
 import EntityForm, { splitFiles } from './EntityForm.jsx';
 import { ErrorBox, Icon, Loading, Modal } from './ui.jsx';
 
@@ -23,6 +24,8 @@ export default function DetailPage({
   nameOf = (row) => row.title,
   onChanged,
   onFiles,
+  history = true, // hiện "Lịch sử thay đổi" ở cuối trang
+  backTo, // đường quay lại (chuỗi hoặc (data) => chuỗi); mặc định là danh sách
 }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -96,7 +99,10 @@ export default function DetailPage({
 
   return (
     <div className="detail">
-      <Link to={`/${resource}`} className="back-link no-print">
+      <Link
+        to={(typeof backTo === 'function' ? backTo(data) : backTo) ?? `/${resource}`}
+        className="back-link no-print"
+      >
         <Icon name="back" size={16} /> {backLabel}
       </Link>
       <div className="detail-head">
@@ -123,6 +129,8 @@ export default function DetailPage({
       </div>
 
       {children(data, { reload, update })}
+
+      {history && <HistorySection entity={resource} id={data.id} reloadKey={data} />}
 
       {editing && (
         <Modal wide title={`Sửa ${codeOf(data)}`} onClose={() => setEditing(false)}>

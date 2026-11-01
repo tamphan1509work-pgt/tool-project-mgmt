@@ -9,6 +9,7 @@ export const ENUMS = {
   bugSeverity: ['minor', 'major', 'critical', 'blocker'],
   bugStatus: ['new', 'in_progress', 'resolved', 'closed', 'reopened', 'rejected'],
   categoryColor: ['gray', 'blue', 'green', 'amber', 'red', 'purple'],
+  milestoneStatus: ['planned', 'in_progress', 'completed', 'cancelled'],
   taskLinkType: ['depends_on', 'blocks', 'relates'],
   projectStatus: ['planning', 'active', 'on_hold', 'completed', 'cancelled'],
   memberRole: ['pm', 'ba', 'tech_lead', 'developer', 'tester', 'designer', 'devops', 'stakeholder'],
@@ -31,6 +32,7 @@ const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 
 export const meetings = {
   table: 'meetings',
+  resource: 'meetings',
   label: 'cuộc họp',
   fields: {
     project_id: projectRef,
@@ -75,6 +77,7 @@ export const meetings = {
 
 export const tasks = {
   table: 'tasks',
+  resource: 'tasks',
   label: 'task',
   fields: {
     project_id: projectRef,
@@ -89,9 +92,11 @@ export const tasks = {
     estimate_hours: { type: 'number' },
     meeting_id: { type: 'ref', table: 'meetings', sameProject: true },
     parent_id: { type: 'ref', table: 'tasks', sameProject: true },
+    milestone_id: { type: 'ref', table: 'milestones', sameProject: true },
     document_ids: {
       type: 'refs',
       table: 'documents',
+  resource: 'documents',
       joinTable: 'task_documents',
       ownKey: 'task_id',
       otherKey: 'document_id',
@@ -105,7 +110,7 @@ export const tasks = {
     (SELECT COUNT(*) FROM task_links l JOIN tasks o ON o.id = l.other_task_id
        WHERE l.task_id = tasks.id AND l.type = 'depends_on' AND o.status <> 'done') AS blocked_by_count`,
   searchable: ['title', 'description', 'assignee'],
-  filterable: ['project_id', 'status', 'priority', 'assignee', 'meeting_id', 'parent_id'],
+  filterable: ['project_id', 'status', 'priority', 'assignee', 'meeting_id', 'parent_id', 'milestone_id'],
   sortable: {
     due_date: "COALESCE(due_date, '9999-12-31')",
     priority: rank('priority', ENUMS.priority),
@@ -159,6 +164,9 @@ export const tasks = {
       parent: row.parent_id
         ? db.prepare('SELECT id, title, status FROM tasks WHERE id = ?').get(row.parent_id) ?? null
         : null,
+      milestone: row.milestone_id
+        ? db.prepare('SELECT id, name, due_date, status FROM milestones WHERE id = ?').get(row.milestone_id) ?? null
+        : null,
       subtasks: db
         .prepare(
           'SELECT id, title, status, priority, assignee, due_date FROM tasks WHERE parent_id = ? ORDER BY id',
@@ -197,6 +205,7 @@ export function taskLinks(db, taskId) {
 
 export const testCases = {
   table: 'test_cases',
+  resource: 'test-cases',
   label: 'test case',
   fields: {
     project_id: projectRef,
@@ -257,6 +266,7 @@ export const testRuns = {
 
 export const bugs = {
   table: 'bugs',
+  resource: 'bugs',
   label: 'bug',
   fields: {
     project_id: projectRef,
@@ -324,6 +334,8 @@ const endAfterStart = (data, existing) => {
 
 export const projects = {
   table: 'projects',
+  resource: 'projects',
+  projectIdOf: (row) => row.id,
   label: 'dự án',
   fields: {
     code: {
@@ -371,6 +383,7 @@ export const projects = {
         openBugs: one("SELECT COUNT(*) AS n FROM bugs WHERE project_id = ? AND status IN ('new','in_progress','reopened')"),
         documents: one('SELECT COUNT(*) AS n FROM documents WHERE project_id = ?'),
         categories: one('SELECT COUNT(*) AS n FROM categories WHERE project_id = ?'),
+        milestones: one('SELECT COUNT(*) AS n FROM milestones WHERE project_id = ?'),
       },
     };
   },
@@ -378,6 +391,7 @@ export const projects = {
 
 export const categories = {
   table: 'categories',
+  resource: 'categories',
   label: 'danh mục',
   fields: {
     project_id: projectRef,
@@ -423,6 +437,50 @@ export const categories = {
   },
 };
 
+export const milestones = {
+  table: 'milestones',
+  resource: 'milestones',
+  label: 'milestone',
+  fields: {
+    project_id: projectRef,
+    name: { type: 'string', required: true },
+    description: { type: 'text' },
+    start_date: { type: 'date' },
+    due_date: { type: 'date', required: true },
+    status: { type: 'enum', values: ENUMS.milestoneStatus, default: 'planned' },
+  },
+  selectExtra: `
+    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id) AS task_count,
+    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id AND t.status = 'done') AS done_count,
+    (SELECT COUNT(*) FROM tasks t WHERE t.milestone_id = milestones.id AND t.status <> 'done'
+       AND t.due_date < date('now', 'localtime')) AS overdue_task_count`,
+  searchable: ['name', 'description'],
+  filterable: ['project_id', 'status'],
+  sortable: { due_date: 'due_date', name: 'name', status: rank('status', ENUMS.milestoneStatus), ...timestamps },
+  defaultSort: 'due_date',
+  defaultOrder: 'ASC',
+  beforeSave(data, existing) {
+    const start = data.start_date !== undefined ? data.start_date : existing?.start_date;
+    const due = data.due_date !== undefined ? data.due_date : existing?.due_date;
+    if (start && due && due < start) {
+      throw new HttpError(400, 'Dữ liệu không hợp lệ', { due_date: 'Hạn milestone không được trước ngày bắt đầu' });
+    }
+    if (data.status !== undefined && data.status !== existing?.status) {
+      data.completed_at = data.status === 'completed' ? nowSql() : null;
+    }
+  },
+  expand(db, row) {
+    return {
+      tasks: db
+        .prepare(
+          `SELECT id, title, status, priority, assignee, due_date, parent_id FROM tasks
+           WHERE milestone_id = ? ORDER BY status = 'done', COALESCE(due_date, '9999-12-31'), id`,
+        )
+        .all(row.id),
+    };
+  },
+};
+
 export function projectMembers(db, projectId) {
   return db
     .prepare(
@@ -436,6 +494,8 @@ export function projectMembers(db, projectId) {
 
 export const members = {
   table: 'members',
+  resource: 'members',
+  projectIdOf: () => null,
   label: 'thành viên',
   fields: {
     name: { type: 'string', required: true },
@@ -446,6 +506,7 @@ export const members = {
     },
     phone: { type: 'string', max: 30 },
     position: { type: 'string', max: 100 },
+    email_notifications: { type: 'boolean', default: 1 },
   },
   selectExtra: `
     (SELECT COUNT(*) FROM project_members pm WHERE pm.member_id = members.id) AS project_count,

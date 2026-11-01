@@ -190,6 +190,27 @@ export default function Dashboard() {
           )}
         />
         <ListCard
+          title="Milestone sắp tới"
+          items={data.milestones}
+          empty="Không có milestone đang mở"
+          more={
+            <Link to={`/projects/${p.id}?tab=milestones`} className="small">
+              Tất cả milestone
+            </Link>
+          }
+          render={(m) => (
+            <li key={m.id}>
+              <Link to={`/milestones/${m.id}`}>◆ {m.name}</Link>
+              <span className="linked-meta">
+                <span className="muted small">
+                  {m.done_count}/{m.task_count} task
+                </span>
+                <span className={m.due_date < data.today ? 'text-danger' : ''}>{fmtDate(m.due_date)}</span>
+              </span>
+            </li>
+          )}
+        />
+        <ListCard
           title="Cuộc họp"
           items={[...data.upcomingMeetings.map((m) => ({ ...m, upcoming: true })), ...data.recentMeetings].slice(0, 6)}
           empty="Chưa có cuộc họp"

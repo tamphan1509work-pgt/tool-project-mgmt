@@ -4,7 +4,7 @@
 // - Bản demo (chạy trong khung xem artifact): chỉ "#tên" được truyền giữa link và trang,
 //   nên link có dạng <link artifact>#tasks-12.
 
-export const LINKABLE = ['meetings', 'tasks', 'test-cases', 'bugs', 'documents', 'projects', 'members'];
+export const LINKABLE = ['meetings', 'tasks', 'test-cases', 'bugs', 'documents', 'projects', 'members', 'milestones'];
 const IS_DEMO = import.meta.env.MODE === 'demo';
 
 /** Đường dẫn trong app -> tên hash (VD "/tasks/12" -> "tasks-12", "/bugs" -> "bugs") */

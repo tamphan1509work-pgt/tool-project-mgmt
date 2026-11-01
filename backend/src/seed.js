@@ -22,7 +22,11 @@ const TABLES = [
   'tasks',
   'meetings',
   'documents',
+  'history',
+  'notification_log',
+  'settings',
   'categories',
+  'milestones',
   'project_members',
   'members',
   'projects',
@@ -538,6 +542,46 @@ export function seed(db, { reset = false } = {}) {
     assign('documents', cOtp, 'Thiết kế UI màn hình thanh toán%');
     assign('documents', cInfra, 'Thiết kế kiến trúc hệ thống');
     assign('documents', cCustomer, 'Tài liệu đặc tả nghiệp vụ CRM');
+
+    // ---------- Milestone ----------
+    const ms = (project_id, name, start, due, status, description = null) =>
+      insert('milestones', {
+        project_id,
+        name,
+        start_date: day(start),
+        due_date: day(due),
+        status,
+        description,
+        completed_at: status === 'completed' ? `${day(due)} 17:00:00` : null,
+      });
+    const msDesign = ms(pay, 'M1 – Chốt thiết kế & kiến trúc', -21, -8, 'completed', 'Hoàn tất SRS, kiến trúc, thiết kế UI');
+    const msCard = ms(pay, 'M2 – Thanh toán thẻ nội địa (Sprint 1–2)', -9, 2, 'in_progress', 'Luồng thẻ nội địa + OTP chạy trên staging');
+    const msUat = ms(pay, 'M3 – UAT & Go-live', 3, 30, 'planned', 'Kiểm thử chấp nhận với khách hàng và đưa vào vận hành');
+    const msCrm = ms(crm, 'Khảo sát yêu cầu', 1, 14, 'planned');
+    const setMs = (milestoneId, ...patterns) => {
+      for (const p of patterns) db.prepare('UPDATE tasks SET milestone_id = ? WHERE title LIKE ?').run(milestoneId, p);
+    };
+    setMs(msDesign, 'Thiết kế kiến trúc service%');
+    setMs(msCard, 'Xây dựng API thanh toán%', 'Màn hình nhập & xác nhận OTP', 'Chuẩn bị môi trường staging', 'Tối ưu giao diện%');
+    setMs(msUat, 'Viết test case cho luồng hoàn tiền');
+    setMs(msCrm, 'Phỏng vấn người dùng%', 'Đề xuất kiến trúc%', 'Wireframe màn hình quản lý khách hàng');
+
+    // ---------- Lịch sử mẫu ----------
+    const hist = (entity, entity_id, action, summary, changes, actor, offset, time) =>
+      insert('history', {
+        project_id: pay,
+        entity,
+        entity_id,
+        action,
+        summary,
+        changes: changes ? JSON.stringify(changes) : null,
+        actor,
+        created_at: `${day(offset)} ${time}`,
+      });
+    hist('tasks', t2, 'create', 'Tạo task "Xây dựng API thanh toán thẻ nội địa"', null, 'Nguyễn Văn An', -10, '02:00:00');
+    hist('tasks', t2, 'update', null, [{ field: 'status', from: 'todo', to: 'in_progress' }], 'Hoàng Gia Huy', -9, '02:30:00');
+    hist('tasks', t2, 'update', null, [{ field: 'status', from: 'in_progress', to: 'review' }, { field: 'due_date', from: day(-1), to: day(1) }], 'Hoàng Gia Huy', -1, '09:15:00');
+    hist('projects', pay, 'member', 'Thêm thành viên "Đỗ Quang Minh" (Designer)', null, 'Nguyễn Văn An', -20, '03:00:00');
   });
 
   console.log('Đã tạo dữ liệu mẫu.');

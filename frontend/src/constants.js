@@ -60,6 +60,12 @@ export const LABELS = {
     approved: ['Đã duyệt', 'green'],
     obsolete: ['Hết hiệu lực', 'red'],
   },
+  milestoneStatus: {
+    planned: ['Kế hoạch', 'gray'],
+    in_progress: ['Đang thực hiện', 'blue'],
+    completed: ['Hoàn thành', 'green'],
+    cancelled: ['Đã huỷ', 'red'],
+  },
   bugStatus: {
     new: ['Mới', 'blue'],
     in_progress: ['Đang xử lý', 'purple'],
@@ -73,7 +79,7 @@ export const LABELS = {
 export const options = (kind) => Object.entries(LABELS[kind]).map(([value, [label]]) => ({ value, label }));
 export const label = (kind, value) => LABELS[kind]?.[value]?.[0] ?? value ?? '';
 
-export const PREFIX = { meetings: 'MTG', tasks: 'TASK', 'test-cases': 'TC', bugs: 'BUG', documents: 'DOC', members: 'MEM' };
+export const PREFIX = { meetings: 'MTG', tasks: 'TASK', 'test-cases': 'TC', bugs: 'BUG', documents: 'DOC', members: 'MEM', milestones: 'MS' };
 export const code = (resource, id) =>
   resource === 'projects' ? `#${id}` : `${PREFIX[resource]}-${String(id).padStart(3, '0')}`;
 

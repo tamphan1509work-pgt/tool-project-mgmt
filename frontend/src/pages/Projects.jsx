@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import DetailPage, { InfoList, Section } from '../components/DetailPage.jsx';
-import ResourceList from '../components/ResourceList.jsx';
+import ResourceList, { useParamSetter } from '../components/ResourceList.jsx';
+import { HistoryList } from '../components/History.jsx';
+import { CategoryList } from './Categories.jsx';
+import { MilestoneList } from './Milestones.jsx';
 import { Badge, Icon, Prose } from '../components/ui.jsx';
 import { fmtDate, options } from '../constants.js';
 import { useConfirm, useLookup, useProject, useToast } from '../context.jsx';
@@ -247,6 +250,95 @@ function StatLink({ to, label, value, sub, onOpen }) {
   );
 }
 
+const PROJECT_TABS = [
+  { value: '', label: 'Tổng quan' },
+  { value: 'milestones', label: 'Milestone' },
+  { value: 'categories', label: 'Danh mục' },
+  { value: 'history', label: 'Lịch sử' },
+];
+
+function ProjectTabs({ project, reload }) {
+  const [params, setParam] = useParamSetter();
+  const { projectId, setProjectId } = useProject();
+  const tab = PROJECT_TABS.some((t) => t.value === params.get('tab')) ? params.get('tab') : '';
+  // Milestone & danh mục được chọn trong form task / bug… của dự án đang làm việc,
+  // nên khi quản lý chúng thì chuyển dự án đang làm việc sang dự án này
+  useEffect(() => {
+    if (['milestones', 'categories'].includes(tab) && projectId !== project.id) setProjectId(project.id);
+  }, [tab, projectId, project.id, setProjectId]);
+  const open = () => setProjectId(project.id);
+  const s = project.stats;
+
+  return (
+    <>
+      <div className="tabs" role="tablist">
+        {PROJECT_TABS.map((t) => (
+          <button
+            key={t.value}
+            role="tab"
+            aria-selected={tab === t.value}
+            className={tab === t.value ? 'active' : ''}
+            onClick={() => setParam('tab', t.value)}
+          >
+            {t.label}
+            {t.value === 'milestones' && s.milestones > 0 && <span className="tab-count">{s.milestones}</span>}
+            {t.value === 'categories' && s.categories > 0 && <span className="tab-count">{s.categories}</span>}
+          </button>
+        ))}
+      </div>
+      {tab === 'milestones' && <MilestoneList project={project} />}
+      {tab === 'categories' && <CategoryList project={project} />}
+      {tab === 'history' && (
+        <section className="card section">
+          <div className="section-head">
+            <h3>Lịch sử thay đổi trong dự án</h3>
+          </div>
+          <HistoryList params={{ project_id: project.id }} showEntity reloadKey={project} />
+        </section>
+      )}
+      {tab === '' && (
+        <div className="detail-grid">
+          <div className="detail-main">
+            <section className="card section">
+              <div className="mini-stats">
+                <StatLink to="/meetings" label="Biên bản họp" value={s.meetings} onOpen={open} />
+                <StatLink to="/tasks" label="Task" value={s.tasks} sub={`${s.doneTasks} hoàn thành`} onOpen={open} />
+                <StatLink
+                  to="/test-cases"
+                  label="Test case"
+                  value={s.testCases}
+                  sub={`${s.passedTests} đạt`}
+                  onOpen={open}
+                />
+                <StatLink to="/bugs" label="Bug" value={s.bugs} sub={`${s.openBugs} đang mở`} onOpen={open} />
+                <StatLink to="/documents" label="Tài liệu" value={s.documents} onOpen={open} />
+              </div>
+            </section>
+            <Members project={project} reload={reload} />
+          </div>
+          <aside className="detail-side">
+            <Section title="Thông tin dự án">
+              <InfoList
+                items={[
+                  [
+                    'Mã dự án',
+                    <span key="c" className="mono">
+                      {project.code}
+                    </span>,
+                  ],
+                  ['Ngày bắt đầu', fmtDate(project.start_date)],
+                  ['Ngày kết thúc dự kiến', fmtDate(project.end_date)],
+                  ['Mô tả', project.description && <Prose text={project.description} />],
+                ]}
+              />
+            </Section>
+          </aside>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ProjectDetail() {
   const navigate = useNavigate();
   const { setProjectId, refreshProjects, projectId } = useProject();
@@ -256,6 +348,7 @@ export function ProjectDetail() {
       backLabel="Danh sách dự án"
       formFields={projectFields}
       scoped={false}
+      history={false}
       codeOf={(p) => p.code}
       nameOf={(p) => p.name}
       onChanged={refreshProjects}
@@ -277,50 +370,7 @@ export function ProjectDetail() {
         </button>
       )}
     >
-      {(p, { reload }) => {
-        const open = () => setProjectId(p.id);
-        const s = p.stats;
-        return (
-          <div className="detail-grid">
-            <div className="detail-main">
-              <section className="card section">
-                <div className="mini-stats">
-                  <StatLink to="/meetings" label="Biên bản họp" value={s.meetings} onOpen={open} />
-                  <StatLink to="/tasks" label="Task" value={s.tasks} sub={`${s.doneTasks} hoàn thành`} onOpen={open} />
-                  <StatLink
-                    to="/test-cases"
-                    label="Test case"
-                    value={s.testCases}
-                    sub={`${s.passedTests} đạt`}
-                    onOpen={open}
-                  />
-                  <StatLink to="/bugs" label="Bug" value={s.bugs} sub={`${s.openBugs} đang mở`} onOpen={open} />
-                  <StatLink to="/documents" label="Tài liệu" value={s.documents} onOpen={open} />
-                  <StatLink to="/categories" label="Danh mục" value={s.categories} onOpen={open} />
-                </div>
-              </section>
-              <Members project={p} reload={reload} />
-            </div>
-            <aside className="detail-side">
-              <Section title="Thông tin dự án">
-                <InfoList
-                  items={[
-                    [
-                      'Mã dự án',
-                      <span key="c" className="mono">
-                        {p.code}
-                      </span>,
-                    ],
-                    ['Ngày bắt đầu', fmtDate(p.start_date)],
-                    ['Ngày kết thúc dự kiến', fmtDate(p.end_date)],
-                    ['Mô tả', p.description && <Prose text={p.description} />],
-                  ]}
-                />
-              </Section>
-            </aside>
-          </div>
-        );
-      }}
+      {(p, { reload }) => <ProjectTabs project={p} reload={reload} />}
     </DetailPage>
   );
 }

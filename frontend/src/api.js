@@ -12,12 +12,34 @@ const doFetch = demo ? demo.demoFetch : (...args) => fetch(...args);
 /** Chỉ có ở bản demo: khôi phục dữ liệu mẫu */
 export const resetDemo = demo?.resetDemo;
 
+/* ---------- Người đang thao tác (ghi vào lịch sử thay đổi) ---------- */
+const ACTOR_KEY = 'pm.actor';
+let actor = null;
+try {
+  actor = localStorage.getItem(ACTOR_KEY) || null;
+} catch {
+  actor = null;
+}
+export const getActor = () => actor;
+export function setActor(name) {
+  actor = name || null;
+  try {
+    if (actor) localStorage.setItem(ACTOR_KEY, actor);
+    else localStorage.removeItem(ACTOR_KEY);
+  } catch {
+    // trình duyệt chặn lưu trữ: chỉ giữ trong phiên
+  }
+}
+
 async function request(method, path, body) {
   let res;
   try {
     res = await doFetch(`/api${path}`, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: {
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(actor ? { 'X-Actor': encodeURIComponent(actor) } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -63,6 +85,12 @@ export const api = {
   removeRun: (runId) => request('DELETE', `/test-runs/${runId}`),
   dashboard: (params) => request('GET', `/dashboard${qs(params)}`),
   config: () => request('GET', '/config'),
+  history: (params) => request('GET', `/history${qs(params)}`),
+  settings: () => request('GET', '/settings'),
+  saveSettings: (data) => request('PUT', '/settings', data),
+  notifications: (params) => request('GET', `/notifications${qs(params)}`),
+  previewEmails: () => request('POST', '/notifications/email/preview', {}),
+  runEmails: (force = false) => request('POST', '/notifications/email/run', { force }),
   // target: 'meetings' | 'test-runs'
   uploadAttachment: (target, id, data) => request('POST', `/${target}/${id}/attachments`, data),
   removeAttachment: (id) => request('DELETE', `/attachments/${id}`),

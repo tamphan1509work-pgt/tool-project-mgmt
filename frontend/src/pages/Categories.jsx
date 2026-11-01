@@ -14,9 +14,10 @@ const COUNTS = [
   { key: 'document_count', label: 'Tài liệu', to: '/documents' },
 ];
 
-/** Quản lý danh mục (cây danh mục cha / con) của dự án đang chọn */
-export function CategoryList() {
-  const { projectId, project } = useProject();
+/** Quản lý danh mục (cây danh mục cha / con) của một dự án — tab "Danh mục" trong chi tiết dự án */
+export function CategoryList({ project }) {
+  const projectId = project.id;
+  const { setProjectId } = useProject();
   const { refreshLookup } = useLookup();
   const toast = useToast();
   const confirm = useConfirm();
@@ -70,7 +71,7 @@ export function CategoryList() {
   return (
     <>
       <p className="page-intro muted">
-        Danh mục giúp phân nhóm task, test case, bug và tài liệu của dự án <strong>{project?.name}</strong>. Danh mục có
+        Danh mục giúp phân nhóm task, test case, bug và tài liệu của dự án <strong>{project.name}</strong>. Danh mục có
         thể có danh mục con; lọc theo một danh mục sẽ gồm cả các danh mục con.
       </p>
       <div className="toolbar">
@@ -129,6 +130,7 @@ export function CategoryList() {
                         {n ? (
                           <Link
                             to={`${k.to}?category_id=${c.id}`}
+                            onClick={() => setProjectId(projectId)}
                             title={`Xem ${k.label.toLowerCase()} trong danh mục`}
                           >
                             {n}

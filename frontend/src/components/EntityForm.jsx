@@ -5,7 +5,13 @@ import { FilePicker } from './Attachments.jsx';
 import { categoryTree } from '../categories.js';
 import DocumentsField from './DocumentsField.jsx';
 
-const REF_RESOURCE = { meetings: 'meetings', tasks: 'tasks', testCases: 'test-cases', documents: 'documents' };
+const REF_RESOURCE = {
+  meetings: 'meetings',
+  tasks: 'tasks',
+  testCases: 'test-cases',
+  documents: 'documents',
+  milestones: 'milestones',
+};
 
 /** Chọn nhiều bản ghi liên kết (VD tài liệu cho task), nhóm theo loại */
 function MultiRef({ field, value, onChange, lookup, id }) {
@@ -84,6 +90,19 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
     }
     case 'documents':
       return <DocumentsField id={id} value={value ?? []} onChange={onChange} />;
+    case 'checkbox':
+      return (
+        <label className="toggle checkbox-field">
+          <input
+            type="checkbox"
+            id={id}
+            name={field.name}
+            checked={Boolean(Number(value))}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+          {field.checkboxLabel}
+        </label>
+      );
     case 'files':
       return <FilePicker id={id} value={value ?? []} onChange={onChange} />;
     case 'multiref':
@@ -115,7 +134,7 @@ function FieldInput({ field, value, onChange, id, lookup, record }) {
           <option value="">— Không liên kết —</option>
           {items.map((it) => (
             <option key={it.id} value={it.id}>
-              {code(REF_RESOURCE[field.source], it.id)} · {it.title}
+              {code(REF_RESOURCE[field.source], it.id)} · {it.title ?? it.name}
             </option>
           ))}
         </select>

@@ -48,6 +48,7 @@ export const taskFields = [
   { name: 'estimate_hours', label: 'Ước lượng (giờ)', type: 'number' },
   { name: 'start_date', label: 'Ngày bắt đầu', type: 'date' },
   { name: 'due_date', label: 'Hạn hoàn thành', type: 'date' },
+  { name: 'milestone_id', label: 'Milestone', type: 'ref', source: 'milestones' },
   { name: 'meeting_id', label: 'Từ cuộc họp', type: 'ref', source: 'meetings' },
   {
     name: 'parent_id',
@@ -188,6 +189,14 @@ export const memberFields = [
   { name: 'position', label: 'Chức danh', placeholder: 'VD: Backend Developer' },
   { name: 'email', label: 'Email', placeholder: 'ten@congty.com' },
   { name: 'phone', label: 'Số điện thoại' },
+  {
+    name: 'email_notifications',
+    label: 'Email nhắc deadline',
+    type: 'checkbox',
+    checkboxLabel: 'Nhận email nhắc task / milestone trễ hoặc sắp đến hạn',
+    default: 1,
+    full: true,
+  },
 ];
 
 export const categoryFields = [
@@ -201,4 +210,19 @@ export const categoryFields = [
   },
   { name: 'color', label: 'Màu nhãn', type: 'select', options: CATEGORY_COLORS, required: true, default: 'blue' },
   { name: 'description', label: 'Mô tả', type: 'textarea', rows: 3 },
+];
+
+export const milestoneFields = [
+  { name: 'name', label: 'Tên milestone', required: true, full: true },
+  { name: 'start_date', label: 'Ngày bắt đầu', type: 'date' },
+  { name: 'due_date', label: 'Hạn hoàn thành', type: 'date', required: true },
+  {
+    name: 'status',
+    label: 'Trạng thái',
+    type: 'select',
+    options: options('milestoneStatus'),
+    required: true,
+    default: 'planned',
+  },
+  { name: 'description', label: 'Mục tiêu / Mô tả', type: 'textarea', rows: 3 },
 ];

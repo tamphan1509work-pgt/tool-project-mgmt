@@ -178,6 +178,55 @@ CREATE TABLE IF NOT EXISTS categories (
 CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id);
 CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
 
+-- Milestone (mốc quan trọng) của dự án; task gắn vào milestone qua tasks.milestone_id
+CREATE TABLE IF NOT EXISTS milestones (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  description  TEXT,
+  start_date   TEXT,
+  due_date     TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'planned',
+  completed_at TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id);
+
+-- Lịch sử thay đổi của mọi mục (ai, khi nào, đổi gì)
+CREATE TABLE IF NOT EXISTS history (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id  INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  entity      TEXT NOT NULL,
+  entity_id   INTEGER NOT NULL,
+  action      TEXT NOT NULL,
+  summary     TEXT,
+  changes     TEXT,
+  actor       TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_history_entity ON history(entity, entity_id);
+CREATE INDEX IF NOT EXISTS idx_history_project ON history(project_id, id);
+
+-- Cài đặt hệ thống (key -> JSON)
+CREATE TABLE IF NOT EXISTS settings (
+  key    TEXT PRIMARY KEY,
+  value  TEXT NOT NULL
+);
+
+-- Nhật ký thông báo đã gửi (tránh gửi trùng trong cùng một ngày)
+CREATE TABLE IF NOT EXISTS notification_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel    TEXT NOT NULL,
+  recipient  TEXT NOT NULL,
+  item_type  TEXT NOT NULL,
+  item_id    INTEGER NOT NULL,
+  kind       TEXT NOT NULL,
+  sent_on    TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (channel, recipient, item_type, item_id, kind, sent_on)
+);
+
 -- Liên kết nhiều-nhiều giữa task và tài liệu
 CREATE TABLE IF NOT EXISTS task_documents (
   task_id      INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -201,6 +250,17 @@ function migrate(db) {
     db.exec('ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE');
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)');
+
+  // Milestone cho task; thành viên có thể tắt email nhắc deadline
+  const taskCols2 = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
+  if (!taskCols2.includes('milestone_id')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN milestone_id INTEGER REFERENCES milestones(id) ON DELETE SET NULL');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_milestone ON tasks(milestone_id)');
+  const memberCols2 = db.prepare('PRAGMA table_info(members)').all().map((c) => c.name);
+  if (!memberCols2.includes('email_notifications')) {
+    db.exec('ALTER TABLE members ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1');
+  }
 
   // Danh mục cho task, test case, bug, tài liệu
   for (const table of ['tasks', 'test_cases', 'bugs', 'documents']) {

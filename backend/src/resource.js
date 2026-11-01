@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { transaction } from './db.js';
+import { actorOf, diffChanges, recordHistory } from './history.js';
 
 export class HttpError extends Error {
   constructor(status, message, details) {
@@ -112,6 +113,13 @@ export function validate(db, fields, body, { partial = false } = {}) {
         v = ids;
         break;
       }
+      case 'boolean':
+        if (![true, false, 0, 1, '0', '1', 'true', 'false'].includes(v)) {
+          errors[name] = 'Phải là đúng / sai';
+          continue;
+        }
+        v = [true, 1, '1', 'true'].includes(v) ? 1 : 0;
+        break;
       case 'number':
         v = Number(v);
         if (!Number.isFinite(v) || v < 0) {
@@ -198,6 +206,30 @@ export function createResource(db, cfg) {
       for (const other of links[name]) ins.run(id, other);
     }
   };
+
+  // ---- Lịch sử thay đổi ----
+  const entity = cfg.resource ?? table;
+  const projectIdOf = cfg.projectIdOf ?? ((row) => row.project_id ?? null);
+  const nameOf = (row) => row.title ?? row.name ?? row.code ?? `#${row.id}`;
+  const currentLinks = (id) => {
+    const out = {};
+    for (const [name, f] of linkFields) {
+      out[name] = db
+        .prepare(`SELECT ${f.otherKey} AS id FROM ${f.joinTable} WHERE ${f.ownKey} = ?`)
+        .all(id)
+        .map((r) => r.id);
+    }
+    return out;
+  };
+  const log = (req, row, action, extra = {}) =>
+    recordHistory(db, {
+      projectId: projectIdOf(row),
+      entity,
+      entityId: row.id,
+      action,
+      actor: actorOf(req),
+      ...extra,
+    });
 
   /** Lỗi UNIQUE của SQLite -> 400 với thông báo theo field */
   const writeGuard = (fn) => {
@@ -294,6 +326,8 @@ export function createResource(db, cfg) {
       transaction(db, () => {
         const newId = Number(db.prepare(sql).run(...cols.map((c) => data[c])).lastInsertRowid);
         saveLinks(newId, links);
+        const row = getRow(newId);
+        log(req, row, 'create', { summary: `Tạo ${cfg.label} "${nameOf(row)}"` });
         return newId;
       }),
     );
@@ -308,6 +342,7 @@ export function createResource(db, cfg) {
     checkSameProject(data, existing);
     const links = splitLinks(data);
     const cols = Object.keys(data);
+    const linksBefore = currentLinks(id);
     writeGuard(() =>
       transaction(db, () => {
         if (cols.length || Object.keys(links).length) {
@@ -316,7 +351,10 @@ export function createResource(db, cfg) {
           ).run(...cols.map((c) => data[c]), id);
         }
         saveLinks(id, links);
-        cfg.afterUpdate?.(db, getRow(id), existing);
+        const row = getRow(id);
+        cfg.afterUpdate?.(db, row, existing);
+        const changes = diffChanges(db, cfg.fields, existing, data, linksBefore, links);
+        if (changes.length) log(req, row, 'update', { changes });
       }),
     );
     res.json(getRow(id));
@@ -326,8 +364,12 @@ export function createResource(db, cfg) {
 
   router.delete('/:id', (req, res) => {
     const id = parseId(req.params.id);
-    mustGet(id);
-    db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+    const row = mustGet(id);
+    transaction(db, () => {
+      // Xoá dự án thì lịch sử của dự án cũng bị xoá theo (FK), nên không ghi thêm
+      if (table !== 'projects') log(req, row, 'delete', { summary: `Xoá ${cfg.label} "${nameOf(row)}"` });
+      db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+    });
     res.status(204).end();
   });
 

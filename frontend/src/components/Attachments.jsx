@@ -101,6 +101,22 @@ export default function Attachments({ meeting, reload }) {
   const download = async (f) => {
     try {
       const blob = await api.attachmentBlob(f.id);
+      // Bản demo chạy trong khung xem artifact: tải về qua capability "downloads" (người xem xác nhận)
+      if (import.meta.env.MODE === 'demo') {
+        const downloads = await window.claude?.use?.('downloads');
+        if (downloads) {
+          try {
+            await downloads.save({ filename: f.name, data: blob });
+          } catch (err) {
+            if (err?.code === 'rejected_extension') {
+              toast(`Bản demo không cho tải định dạng file này. ${canPreview(f) ? 'Hãy dùng nút Xem.' : ''}`, 'error');
+            } else if (err?.code !== 'declined') {
+              toast('Không tải được file trong bản demo', 'error');
+            }
+          }
+          return;
+        }
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -197,7 +213,7 @@ export default function Attachments({ meeting, reload }) {
             <span className="muted small">Tối đa {fmtSize(maxBytes)} / file</span>
             {import.meta.env.MODE === 'demo' && (
               <span className="muted small">
-                · Bản demo: file lưu trong trình duyệt; khung nhúng có thể chặn tải về, hãy dùng nút Xem
+                · Bản demo: file chỉ lưu trong trình duyệt này
               </span>
             )}
           </>
